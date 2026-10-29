@@ -4,6 +4,7 @@ import br.com.clinica.ms_administrativo.dto.PacienteResumo;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import br.com.clinica.ms_administrativo.dto.SituacaoResponse;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -31,5 +32,12 @@ public class PacienteIntegracaoController {
                 "FEMININO",
                 true
         );
+    }
+
+    @GetMapping("/{id}/situacao")
+    public SituacaoResponse consultarSituacao(@PathVariable("id") UUID id) {
+        boolean existe = ID_EXEMPLO.equals(id);
+
+        return new SituacaoResponse(existe, existe);
     }
 }
