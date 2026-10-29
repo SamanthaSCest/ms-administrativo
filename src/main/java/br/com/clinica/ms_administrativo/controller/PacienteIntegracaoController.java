@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import br.com.clinica.ms_administrativo.dto.SituacaoResponse;
+import br.com.clinica.ms_administrativo.dto.PacienteContato;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -40,4 +41,18 @@ public class PacienteIntegracaoController {
 
         return new SituacaoResponse(existe, existe);
     }
+    @GetMapping("/{id}/contato")
+    public PacienteContato consultarContato(@PathVariable("id") UUID id) {
+    if (!ID_EXEMPLO.equals(id)) {
+        throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Registro não encontrado"
+        );
+    }
+
+    return new PacienteContato(
+            "Maria Aparecida Souza",
+            "maria.souza@email.com",
+            "34999998888"
+    );
+}
 }
