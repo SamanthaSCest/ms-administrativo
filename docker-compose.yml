@@ -4,22 +4,51 @@ services:
     environment:
       POSTGRES_DB: clinica_administrativo
       POSTGRES_USER: clinica
-      POSTGRES_PASSWORD: clinica123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinica123}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   rabbitmq:
     image: rabbitmq:4-management
     environment:
       RABBITMQ_DEFAULT_USER: clinica
-      RABBITMQ_DEFAULT_PASS: clinica123
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-clinica123}
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      POSTGRES_DB: clinica_administrativo
+      POSTGRES_USER: clinica
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinica123}
+      RABBITMQ_USER: clinica
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-clinica123}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   postgres_data:
