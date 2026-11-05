@@ -49,7 +49,10 @@ src/
 
 ## Como rodar
 
+Dentro da pasta `ms-administrativo`:
+
 ```bash
+cd ms-administrativo
 docker compose up --build
 ```
 
