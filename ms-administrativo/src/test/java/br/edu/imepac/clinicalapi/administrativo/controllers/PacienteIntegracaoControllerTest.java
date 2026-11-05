@@ -6,11 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,6 +23,7 @@ class PacienteIntegracaoControllerTest {
 
     private static final UUID PACIENTE_ID = UUID.fromString("8f14e45f-ceea-4a7b-9b1e-0c7d2f1a9e11");
     private static final UUID ID_INEXISTENTE = UUID.fromString("2f14e45f-ceea-4a7b-9b1e-0c7d2f1a9e22");
+    private static final String ESCOPO_LEITURA = "SCOPE_integracao:pacientes.ler";
 
     @Autowired
     private MockMvc mockMvc;
@@ -61,7 +64,8 @@ class PacienteIntegracaoControllerTest {
 
     @Test
     void deveConsultarResumoPersistidoComCpfMascarado() throws Exception {
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", PACIENTE_ID))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", PACIENTE_ID)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(PACIENTE_ID.toString()))
                 .andExpect(jsonPath("$.nome").value("Maria Aparecida Souza"))
@@ -73,7 +77,8 @@ class PacienteIntegracaoControllerTest {
     void deveRetornarSituacaoRealDoPaciente() throws Exception {
         jdbcTemplate.update("UPDATE paciente SET ativo = false WHERE id = ?", PACIENTE_ID);
 
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/situacao", PACIENTE_ID))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/situacao", PACIENTE_ID)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.existe").value(true))
                 .andExpect(jsonPath("$.ativo").value(false));
@@ -81,7 +86,8 @@ class PacienteIntegracaoControllerTest {
 
     @Test
     void deveRetornarSituacaoFalsaParaIdInexistenteSemErro() throws Exception {
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/situacao", ID_INEXISTENTE))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/situacao", ID_INEXISTENTE)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.existe").value(false))
                 .andExpect(jsonPath("$.ativo").value(false));
@@ -89,7 +95,8 @@ class PacienteIntegracaoControllerTest {
 
     @Test
     void deveRetornarContatoPersistido() throws Exception {
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/contato", PACIENTE_ID))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/contato", PACIENTE_ID)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Maria Aparecida Souza"))
                 .andExpect(jsonPath("$.email").value("maria.souza@email.com"))
@@ -98,9 +105,24 @@ class PacienteIntegracaoControllerTest {
 
     @Test
     void deveRetornar404ParaResumoOuContatoInexistente() throws Exception {
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", ID_INEXISTENTE))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", ID_INEXISTENTE)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/contato", ID_INEXISTENTE))
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}/contato", ID_INEXISTENTE)
+                .with(jwt().authorities(new SimpleGrantedAuthority(ESCOPO_LEITURA))))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deveRetornar401SemToken() throws Exception {
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", PACIENTE_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void deveRetornar403SemScopeNecessario() throws Exception {
+        mockMvc.perform(get("/api/v1/integracao/pacientes/{id}", PACIENTE_ID)
+                .with(jwt()))
+                .andExpect(status().isForbidden());
     }
 }
