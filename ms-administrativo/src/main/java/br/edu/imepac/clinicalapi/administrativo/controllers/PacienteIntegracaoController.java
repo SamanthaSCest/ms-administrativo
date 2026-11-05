@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/integracao/pacientes")
+@RequestMapping("/api/v1/integracao/pacientes/{id}")
 public class PacienteIntegracaoController {
 
     private final PacienteIntegracaoService pacienteService;
@@ -18,17 +18,17 @@ public class PacienteIntegracaoController {
         this.pacienteService = pacienteService;
     }
 
-    @GetMapping("/{id}")
+    @GetMapping
     public PacienteResumo buscarPorId(@PathVariable("id") UUID id) {
         return pacienteService.buscarResumo(id);
     }
 
-    @GetMapping("/{id}/situacao")
+    @GetMapping("/situacao")
     public SituacaoResponse consultarSituacao(@PathVariable("id") UUID id) {
         return pacienteService.buscarSituacao(id);
     }
 
-    @GetMapping("/{id}/contato")
+    @GetMapping("/contato")
     public PacienteContato consultarContato(@PathVariable("id") UUID id) {
         return pacienteService.buscarContato(id);
     }

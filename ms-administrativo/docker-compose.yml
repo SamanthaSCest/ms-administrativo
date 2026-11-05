@@ -42,6 +42,13 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinica123}
       RABBITMQ_USER: clinica
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-clinica123}
+      JWT_CHAVE_PRIVADA: /run/secrets/jwt-private.pem
+      JWT_CHAVE_PUBLICA: /run/secrets/jwt-public.pem
+    # Os arquivos ficam na pasta secrets, um nível acima deste docker-compose.yml.
+    # No contêiner, são disponibilizados em /run/secrets e somente para leitura.
+    volumes:
+      - ../secrets/jwt-private.pem:/run/secrets/jwt-private.pem:ro
+      - ../secrets/jwt-public.pem:/run/secrets/jwt-public.pem:ro
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

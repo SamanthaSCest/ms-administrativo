@@ -56,8 +56,8 @@ public class PublicadorOutbox {
     private void aguardarConfirmacao(CorrelationData confirmacao) {
         try {
             CorrelationData.Confirm resultado = confirmacao.getFuture().get(10, TimeUnit.SECONDS);
-            if (!resultado.isAck()) {
-                throw new IllegalStateException("RabbitMQ rejeitou a publicação: " + resultado.getReason());
+            if (!resultado.ack()) {
+                throw new IllegalStateException("RabbitMQ rejeitou a publicação: " + resultado.reason());
             }
             if (confirmacao.getReturned() != null) {
                 throw new IllegalStateException(
