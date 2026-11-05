@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -24,10 +26,23 @@ import java.util.Base64;
 @Configuration
 public class JwtConfig {
 
+    /**
+     * Quando true, gera um par de chaves RSA em memória em vez de ler os arquivos .pem.
+     * Usar SOMENTE em testes (ver src/test/resources/application.properties).
+     */
+    @Value("${jwt.chave-efemera:false}")
+    private boolean chaveEfemera;
+
+    private KeyPair parEfemero;
+
     @Bean
     public RSAPublicKey jwtPublicKey(
             @Value("${JWT_CHAVE_PUBLICA:/run/secrets/jwt-public.pem}") String caminho)
             throws Exception {
+
+        if (chaveEfemera) {
+            return (RSAPublicKey) parEfemero().getPublic();
+        }
 
         String pem = lerArquivo(caminho)
                 .replace("-----BEGIN PUBLIC KEY-----", "")
@@ -44,6 +59,10 @@ public class JwtConfig {
     public RSAPrivateKey jwtPrivateKey(
             @Value("${JWT_CHAVE_PRIVADA:/run/secrets/jwt-private.pem}") String caminho)
             throws Exception {
+
+        if (chaveEfemera) {
+            return (RSAPrivateKey) parEfemero().getPrivate();
+        }
 
         String pem = lerArquivo(caminho)
                 .replace("-----BEGIN PRIVATE KEY-----", "")
@@ -73,6 +92,15 @@ public class JwtConfig {
 
         return new NimbusJwtEncoder(
                 new ImmutableJWKSet<>(new JWKSet(chave)));
+    }
+
+    private synchronized KeyPair parEfemero() throws Exception {
+        if (parEfemero == null) {
+            KeyPairGenerator gerador = KeyPairGenerator.getInstance("RSA");
+            gerador.initialize(2048);
+            parEfemero = gerador.generateKeyPair();
+        }
+        return parEfemero;
     }
 
     private String lerArquivo(String caminho) throws Exception {
