@@ -1,4 +1,4 @@
-package br.com.clinica.ms_administrativo.comum.validacao;
+package br.edu.imepac.clinicalapi.administrativo.validation;
 
 import org.junit.jupiter.api.Test;
 

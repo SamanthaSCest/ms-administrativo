@@ -1,4 +1,4 @@
-package br.com.clinica.ms_administrativo.comum.erro;
+package br.edu.imepac.clinicalapi.administrativo.exceptions;
 
 import org.springframework.http.HttpStatus;
 
