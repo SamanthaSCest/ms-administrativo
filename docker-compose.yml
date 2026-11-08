@@ -1,0 +1,126 @@
+services:
+  # um banco MySQL por microserviço (cada serviço é dono dos seus dados)
+  mysql-administrativo:
+    image: mysql:8.4
+    container_name: mysql-administrativo
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: clinical_administrativo
+      MYSQL_USER: clinical
+      MYSQL_PASSWORD: clinical
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-administrativo-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mysql-agendamento:
+    image: mysql:8.4
+    container_name: mysql-agendamento
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: clinical_agendamento
+      MYSQL_USER: clinical
+      MYSQL_PASSWORD: clinical
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql-agendamento-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # RabbitMQ: recebe os eventos do ms-administrativo (exchange adm.events). Painel: http://localhost:15672
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: clinical
+      RABBITMQ_DEFAULT_PASS: clinical
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ms-administrativo:
+    build:
+      context: .
+      dockerfile: ms-administrativo/Dockerfile
+    image: clinical/ms-administrativo:latest
+    container_name: ms-administrativo
+    environment:
+      DB_URL: jdbc:mysql://mysql-administrativo:3306/clinical_administrativo?serverTimezone=UTC
+      DB_USER: clinical
+      DB_PASSWORD: clinical
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: clinical
+      RABBITMQ_PASSWORD: clinical
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql-administrativo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  ms-agendamento:
+    build:
+      context: .
+      dockerfile: ms-agendamento/Dockerfile
+    image: clinical/ms-agendamento:latest
+    container_name: ms-agendamento
+    environment:
+      DB_URL: jdbc:mysql://mysql-agendamento:3306/clinical_agendamento?serverTimezone=UTC
+      DB_USER: clinical
+      DB_PASSWORD: clinical
+      ADMINISTRATIVO_URL: http://ms-administrativo:8081
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql-agendamento:
+        condition: service_healthy
+      ms-administrativo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: clinical/api-gateway:latest
+    container_name: api-gateway
+    environment:
+      ADMINISTRATIVO_URL: http://ms-administrativo:8081
+      AGENDAMENTO_URL: http://ms-agendamento:8082
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      ms-administrativo:
+        condition: service_healthy
+      ms-agendamento:
+        condition: service_healthy
+
+volumes:
+  mysql-administrativo-data:
+  mysql-agendamento-data:

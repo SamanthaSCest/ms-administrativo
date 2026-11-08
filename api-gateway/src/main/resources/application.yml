@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # http://localhost:8080/administrativo/medicos  ->  ms-administrativo /medicos
+        - id: ms-administrativo
+          uri: ${ADMINISTRATIVO_URL:http://localhost:8081}
+          predicates:
+            - Path=/administrativo/**
+          filters:
+            - StripPrefix=1
+        # http://localhost:8080/agendamento/consultas  ->  ms-agendamento /consultas
+        - id: ms-agendamento
+          uri: ${AGENDAMENTO_URL:http://localhost:8082}
+          predicates:
+            - Path=/agendamento/**
+          filters:
+            - StripPrefix=1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true

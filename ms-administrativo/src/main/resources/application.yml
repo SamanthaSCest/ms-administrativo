@@ -1,0 +1,54 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+# ${VARIAVEL:padrão} = usa a variável de ambiente se existir (Docker), senão o valor padrão (execução local)
+spring:
+  application:
+    name: ms-administrativo
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3307/clinical_administrativo?serverTimezone=UTC}
+    username: ${DB_USER:clinical}
+    password: ${DB_PASSWORD:clinical}
+  jpa:
+    open-in-view: false  # evita consultas lazy "escondidas" na camada web
+    hibernate:
+      ddl-auto: validate   # o schema é gerenciado pelo Flyway (db/migration)
+  flyway:
+    enabled: true
+  # RabbitMQ: eventos da outbox (exchange adm.events)
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated  # o RabbitMQ confirma cada mensagem recebida
+    publisher-returns: true             # avisa quando nenhuma fila assina o evento
+    template:
+      mandatory: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    # Swagger UI exibe o contrato escrito à mão (fonte de verdade)
+    url: /contract/openapi-administrativo.yaml
+    path: /swagger-ui.html
+
+# Níveis de log (TRACE < DEBUG < INFO < WARN < ERROR). Mude para DEBUG para ver mais detalhes
+# do nosso código, ex.: LOGGING_LEVEL_BR_EDU_IMEPAC=DEBUG
+logging:
+  level:
+    br.edu.imepac: INFO
+
+# Publicador da outbox (desligado nos testes, que não sobem RabbitMQ)
+outbox:
+  publicador:
+    habilitado: ${OUTBOX_PUBLICADOR_HABILITADO:true}

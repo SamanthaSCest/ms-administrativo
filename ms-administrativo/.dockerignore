@@ -1,9 +1,0 @@
-.git
-.github
-.vscode
-.idea
-target
-*.iml
-secrets/
-.env
-*.pem

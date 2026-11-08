@@ -5,46 +5,48 @@ import br.edu.imepac.clinicalapi.administrativo.repositories.OutboxRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.assertThat;
 
+/** Grava um evento de verdade na tabela outbox_evento (Flyway V2 em H2) e confere o envelope. */
 @SpringBootTest
+@ActiveProfiles("test")
 class OutboxServiceTest {
 
     @Autowired
     private OutboxService outboxService;
-
     @Autowired
     private OutboxRepository outboxRepository;
 
     @Test
     void devePersistirEnvelopeCompletoNaOutbox() {
-        UUID agregadoId = UUID.randomUUID();
+        UUID eventoId = outboxService.registrar("paciente.criado", 42L, Map.of("nome", "Maria"), List.of());
 
-        UUID eventoId = outboxService.registrar(
-                "convenio.criado",
-                agregadoId,
-                Map.of("nome", "Plano Saúde"),
-                List.of()
-        );
+        OutboxEvento evento = outboxRepository.findById(eventoId.toString()).orElseThrow();
 
-        OutboxEvento evento = outboxRepository.findById(eventoId).orElseThrow();
+        assertThat(evento.getTipo()).isEqualTo("paciente.criado");
+        assertThat(evento.getAgregadoId()).isEqualTo(42L);
+        assertThat(evento.getCriadoEm()).isNotNull();
+        assertThat(evento.getPublicadoEm()).isNull();
+        assertThat(evento.getPayload().path("eventoId").asText()).isEqualTo(eventoId.toString());
+        assertThat(evento.getPayload().path("versao").asInt()).isEqualTo(1);
+        assertThat(evento.getPayload().path("origem").asText()).isEqualTo("ms-administrativo");
+        assertThat(evento.getPayload().path("agregadoId").asLong()).isEqualTo(42L);
+        assertThat(evento.getPayload().path("dados").path("nome").asText()).isEqualTo("Maria");
+        assertThat(evento.getPayload().path("camposAlterados").size()).isZero();
+    }
 
-        assertEquals("convenio.criado", evento.getTipo());
-        assertEquals(agregadoId, evento.getAgregadoId());
-        assertNotNull(evento.getCriadoEm());
-        assertEquals(eventoId.toString(), evento.getPayload().path("eventoId").asText());
-        assertEquals("convenio.criado", evento.getPayload().path("tipo").asText());
-        assertEquals(1, evento.getPayload().path("versao").asInt());
-        assertEquals("ms-administrativo", evento.getPayload().path("origem").asText());
-        assertEquals(agregadoId.toString(), evento.getPayload().path("agregadoId").asText());
-        assertEquals("Plano Saúde", evento.getPayload().path("dados").path("nome").asText());
-        assertEquals(0, evento.getPayload().path("camposAlterados").size());
-        assertNotNull(evento.getPayload().path("ocorridoEm").asText());
+    @Test
+    void eventoNovoApareceComoPendente() {
+        UUID eventoId = outboxService.registrar("medico.criado", 7L, Map.of("crm", "123"), List.of());
+
+        assertThat(outboxRepository.findTop100ByPublicadoEmIsNullOrderByCriadoEmAsc())
+                .extracting(OutboxEvento::getId)
+                .contains(eventoId.toString());
     }
 }

@@ -10,15 +10,17 @@ import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,92 +35,66 @@ class PublicadorOutboxTest {
     @Test
     void devePublicarComoJsonEMarcarEventoPublicado() {
         OutboxEvento evento = novoEvento();
-        when(outboxRepository.buscarPendentesParaPublicacao())
-                .thenReturn(List.of(evento));
-        doAnswer(invocacao -> {
-            CorrelationData confirmacao = invocacao.getArgument(3);
-            confirmacao.getFuture().complete(new CorrelationData.Confirm(true, ""));
-            return null;
-        }).when(rabbitTemplate).send(
-                any(String.class),
-                any(String.class),
-                any(Message.class),
-                any(CorrelationData.class)
-        );
+        when(outboxRepository.findTop100ByPublicadoEmIsNullOrderByCriadoEmAsc()).thenReturn(List.of(evento));
+        confirmarEnvio(false);
 
         publicador.publicarPendentes();
 
         verify(rabbitTemplate).send(
                 eq(RabbitMqEventosConfiguration.EXCHANGE_EVENTOS),
-                eq("convenio.criado"),
-                org.mockito.ArgumentMatchers.argThat((Message mensagem) ->
-                        mensagem.getMessageProperties().getContentType().equals("application/json")
-                                && mensagem.getBody().length > 0),
-                any(CorrelationData.class)
-        );
+                eq("paciente.criado"),
+                argThat((Message m) -> "application/json".equals(m.getMessageProperties().getContentType())
+                        && m.getBody().length > 0),
+                any(CorrelationData.class));
         verify(outboxRepository).save(evento);
-        assertNotNull(evento.getPublicadoEm());
+        assertThat(evento.getPublicadoEm()).isNotNull();
     }
 
     @Test
     void naoDeveMarcarEventoPublicadoQuandoEnvioFalhar() {
         OutboxEvento evento = novoEvento();
-        when(outboxRepository.buscarPendentesParaPublicacao())
-                .thenReturn(List.of(evento));
-        org.mockito.Mockito.doThrow(new IllegalStateException("RabbitMQ indisponível"))
-                .when(rabbitTemplate)
-                .send(
-                        any(String.class),
-                        any(String.class),
-                        any(Message.class),
-                        any(CorrelationData.class)
-                );
+        when(outboxRepository.findTop100ByPublicadoEmIsNullOrderByCriadoEmAsc()).thenReturn(List.of(evento));
+        doThrow(new IllegalStateException("RabbitMQ indisponível"))
+                .when(rabbitTemplate).send(any(String.class), any(String.class), any(Message.class), any(CorrelationData.class));
 
-        assertThrows(IllegalStateException.class, publicador::publicarPendentes);
+        assertThatThrownBy(publicador::publicarPendentes).isInstanceOf(IllegalStateException.class);
 
         verify(outboxRepository, never()).save(evento);
-        org.junit.jupiter.api.Assertions.assertNull(evento.getPublicadoEm());
+        assertThat(evento.getPublicadoEm()).isNull();
     }
 
     @Test
-    void naoDeveMarcarEventoPublicadoQuandoRabbitNaoRoteiaMensagem() {
+    void eventoSemFilaAssinanteNaoTravaAOutbox() {
         OutboxEvento evento = novoEvento();
-        when(outboxRepository.buscarPendentesParaPublicacao())
-                .thenReturn(List.of(evento));
+        when(outboxRepository.findTop100ByPublicadoEmIsNullOrderByCriadoEmAsc()).thenReturn(List.of(evento));
+        confirmarEnvio(true);
+
+        publicador.publicarPendentes();
+
+        verify(outboxRepository).save(evento);
+        assertThat(evento.getPublicadoEm()).isNotNull();
+    }
+
+    /** Simula o RabbitMQ confirmando o envio; semFila = a mensagem volta por falta de fila assinante. */
+    private void confirmarEnvio(boolean semFila) {
         doAnswer(invocacao -> {
-            CorrelationData confirmacao = invocacao.getArgument(3);
             Message mensagem = invocacao.getArgument(2);
-            confirmacao.setReturned(new ReturnedMessage(
-                    mensagem,
-                    312,
-                    "NO_ROUTE",
-                    RabbitMqEventosConfiguration.EXCHANGE_EVENTOS,
-                    "convenio.criado"
-            ));
+            CorrelationData confirmacao = invocacao.getArgument(3);
+            if (semFila) {
+                confirmacao.setReturned(new ReturnedMessage(mensagem, 312, "NO_ROUTE",
+                        RabbitMqEventosConfiguration.EXCHANGE_EVENTOS, "paciente.criado"));
+            }
             confirmacao.getFuture().complete(new CorrelationData.Confirm(true, ""));
             return null;
-        }).when(rabbitTemplate).send(
-                any(String.class),
-                any(String.class),
-                any(Message.class),
-                any(CorrelationData.class)
-        );
-
-        assertThrows(IllegalStateException.class, publicador::publicarPendentes);
-
-        verify(outboxRepository, never()).save(evento);
-        org.junit.jupiter.api.Assertions.assertNull(evento.getPublicadoEm());
+        }).when(rabbitTemplate).send(any(String.class), any(String.class), any(Message.class), any(CorrelationData.class));
     }
 
     private OutboxEvento novoEvento() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        Instant agora = Instant.now();
         return new OutboxEvento(
-                UUID.randomUUID(),
-                "convenio.criado",
-                UUID.randomUUID(),
-                objectMapper.createObjectNode().put("nome", "Convênio exemplo"),
-                agora
-        );
+                UUID.randomUUID().toString(),
+                "paciente.criado",
+                1L,
+                new ObjectMapper().createObjectNode().put("nome", "Maria"),
+                LocalDateTime.now());
     }
 }

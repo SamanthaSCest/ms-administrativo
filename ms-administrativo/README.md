@@ -1,4 +1,4 @@
-# Módulo administrativo (MS-ADM)
+# Módulo administrativo
 
 Este módulo faz parte do projeto `clinicalapi` e segue o pacote base:
 
@@ -15,50 +15,48 @@ src/
           imepac/
             clinicalapi/
               administrativo/
-                ApplicationAdministrativo.java
-                config/
-                controllers/
-                dto/
+                Application.java
                 entities/
-                exceptions/
-                mapper/
                 repositories/
                 services/
+                controllers/
                 utils/
+                dto/
+                mapper/
+                exceptions/
+                config/
                 validation/
-    resources/
-      application.properties
-      application-docker.properties
-      db/migration/
-  test/
-    java/  (mesma árvore de pacotes do main)
 ```
 
 ## Convenções
 
-- `entities`: entidades de domínio / JPA (inclui `EntidadeBase`, `Endereco`, `UF` e `OutboxEvento`)
-- `repositories`: interfaces de persistência e consultas (JPA e `JdbcTemplate`)
-- `services`: regras de negócio (inclui a gravação e a publicação dos eventos da outbox)
+- `entities`: entidades de domínio / JPA
+- `repositories`: interfaces de persistência
+- `services`: regras de negócio
 - `controllers`: endpoints REST
 - `utils`: utilitários e helpers
-- `dto`: request/response da API e o envelope dos eventos
+- `dto`: request/response da API
 - `mapper`: conversão entre DTOs e entidades
 - `exceptions`: exceções e tratamento de erros
-- `config`: configurações do Spring e beans (auditoria, Jackson da outbox, RabbitMQ)
+- `config`: configurações do Spring e beans
 - `validation`: validações e regras específicas
-
-## Como rodar
-
-Dentro da pasta `ms-administrativo`:
-
-```bash
-cd ms-administrativo
-docker compose up --build
-```
-
-A API sobe na porta 8080, com o Swagger em `/swagger-ui.html` e a saúde em `/actuator/health`.
 
 ## Observações
 
-- Estrutura alinhada ao repositório da turma (`clinical-back-2026-02`).
+- Esse README define a base inicial da organização do módulo.
 - Novos pacotes podem ser adicionados conforme a funcionalidade evoluir.
+
+## Extensões do grupo (MS-ADM)
+
+Além dos CRUDs de Especialidade, Médico e Paciente do modelo, este módulo traz:
+
+| O quê | Onde | Para que serve |
+|---|---|---|
+| API de integração do paciente | `controllers/PacienteIntegracaoController`, `services/PacienteIntegracaoService`, `dto/integracao/` | Leituras para outros microserviços: `GET /integracao/pacientes/{id}` (CPF mascarado), `/situacao` (sempre 200, `existe` true/false) e `/contato` |
+| Máscara de CPF (LGPD) | `utils/CpfMascara` | `12345678909` → `***.456.789-**` |
+| Validadores de CPF e CNPJ | `validation/@Cpf`, `validation/@Cnpj` | Conferem os dígitos verificadores (prontos para usar nos DTOs) |
+| Endereço e UF | `entities/Endereco`, `entities/UF` | Objeto embutido de endereço, para Unidade e Paciente |
+| Outbox de eventos + RabbitMQ | `entities/OutboxEvento`, `services/OutboxService`, `services/PublicadorOutbox`, `config/RabbitMqEventosConfiguration`, `db/migration/V2__criar_outbox_evento.sql` | O serviço chama `outboxService.registrar(...)` dentro da transação; a cada 5 s o publicador envia os pendentes para a exchange `adm.events` (topic) |
+
+O RabbitMQ sobe junto no `docker compose` (painel em http://localhost:15672, usuário `clinical`/`clinical`).
+Nos testes o publicador fica desligado (`outbox.publicador.habilitado: false`).
