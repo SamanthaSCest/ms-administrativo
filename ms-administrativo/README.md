@@ -45,6 +45,7 @@ src/
 
 - Esse README define a base inicial da organização do módulo.
 - Novos pacotes podem ser adicionados conforme a funcionalidade evoluir.
+- A imagem Docker compila e executa o serviço com Eclipse Temurin 25 LTS.
 
 ## Extensões do grupo (MS-ADM)
 

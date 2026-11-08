@@ -29,9 +29,9 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 
 | Tecnologia | Onde | Para que serve |
 |---|---|---|
-| **Java 17** | todos | Linguagem/plataforma (LTS). |
+| **Java 25 LTS** | módulos | Todos compilam e executam com Java 25. |
 | **Maven** (multi-módulo) | raiz | Compila, roda os testes e empacota. O `pom.xml` raiz declara os módulos e as versões das bibliotecas; cada módulo só lista o que usa. |
-| **Spring Boot 3.3** | todos | Sobe a aplicação com configuração automática e servidor web embutido (Tomcat/Netty); empacota tudo num único `.jar` executável. |
+| **Spring Boot 3.5** | todos | Sobe a aplicação com configuração automática e servidor web embutido (Tomcat/Netty); empacota tudo num único `.jar` executável. |
 | **Spring Web (MVC)** | serviços | Cria os endpoints REST (`@RestController`, `@GetMapping`...). |
 | **Spring Data JPA + Hibernate** | serviços | Mapeia classes Java (entidades) para tabelas e gera o SQL; os repositories são só interfaces. |
 | **MySQL 8** | docker-compose | Banco relacional. **Um banco por microserviço**: cada serviço é dono dos seus dados e ninguém acessa o banco do outro (só pela API). |
@@ -72,7 +72,7 @@ Para criar uma API nova: **1)** escreva/atualize o YAML e combine com os outros 
 
 ## Pré-requisitos
 
-- JDK **17** e Maven 3.9+ (`mvn -v` deve mostrar Java 17; com outra versão use `JAVA_HOME`)
+- JDK **25** e Maven 3.9+ (`mvn -v` deve mostrar Java 25; com outra versão use `JAVA_HOME`)
 - Docker (com Docker Compose)
 
 ## Compilar e testar
@@ -109,7 +109,7 @@ docker compose down              # para tudo (adicione -v para apagar o banco)
 Se a porta 8080 do host estiver ocupada, troque a do gateway: `GATEWAY_PORT=8090 docker compose up -d --build`
 (e use `localhost:8090` nos exemplos).
 
-As imagens usam `eclipse-temurin:17-jre-jammy` (multi-arquitetura, roda em Apple Silicon e x86).
+As imagens usam Eclipse Temurin 25 para compilação e execução (imagens JRE `25-jre-noble` multi-arquitetura).
 
 ### Opção 2 — cada serviço como um container (`docker run`)
 
