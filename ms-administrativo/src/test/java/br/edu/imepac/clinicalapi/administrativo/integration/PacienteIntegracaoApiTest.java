@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 
+import static br.edu.imepac.clinicalapi.administrativo.integration.AutenticacaoTestUtils.integracaoPacientes;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,7 +48,8 @@ class PacienteIntegracaoApiTest {
 
     @Test
     void resumo_deveVirComCpfMascarado() throws Exception {
-        mockMvc.perform(get("/integracao/pacientes/{id}", pacienteId))
+        mockMvc.perform(get("/integracao/pacientes/{id}", pacienteId)
+                        .with(integracaoPacientes()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(pacienteId))
                 .andExpect(jsonPath("$.nome").value("Maria Aparecida Souza"))
@@ -57,18 +59,21 @@ class PacienteIntegracaoApiTest {
 
     @Test
     void resumo_inexistente_retorna404() throws Exception {
-        mockMvc.perform(get("/integracao/pacientes/{id}", 999999))
+        mockMvc.perform(get("/integracao/pacientes/{id}", 999999)
+                        .with(integracaoPacientes()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void situacao_existenteEInexistente_sempre200() throws Exception {
-        mockMvc.perform(get("/integracao/pacientes/{id}/situacao", pacienteId))
+        mockMvc.perform(get("/integracao/pacientes/{id}/situacao", pacienteId)
+                        .with(integracaoPacientes()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.existe").value(true))
                 .andExpect(jsonPath("$.ativo").value(true));
 
-        mockMvc.perform(get("/integracao/pacientes/{id}/situacao", 999999))
+        mockMvc.perform(get("/integracao/pacientes/{id}/situacao", 999999)
+                        .with(integracaoPacientes()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.existe").value(false))
                 .andExpect(jsonPath("$.ativo").value(false));
@@ -76,7 +81,8 @@ class PacienteIntegracaoApiTest {
 
     @Test
     void contato_deveDevolverEmailETelefone() throws Exception {
-        mockMvc.perform(get("/integracao/pacientes/{id}/contato", pacienteId))
+        mockMvc.perform(get("/integracao/pacientes/{id}/contato", pacienteId)
+                        .with(integracaoPacientes()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("maria@email.com"))
                 .andExpect(jsonPath("$.telefone").value("34999998888"));
