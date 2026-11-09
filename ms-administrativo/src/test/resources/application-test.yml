@@ -5,6 +5,15 @@ spring:
     password:
     driver-class-name: org.h2.Driver
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Os testes usam jwt() do spring-security-test e não chamam o Keycloak.
+          # Este endereço nunca é consultado; só evita a descoberta do issuer na inicialização.
+          issuer-uri: http://localhost:8180/realms/clinica-test
+          jwk-set-uri: http://localhost:8180/realms/clinica-test/protocol/openid-connect/certs
+
 # Os testes não sobem RabbitMQ: o agendador que publica a outbox fica desligado
 outbox:
   publicador:
