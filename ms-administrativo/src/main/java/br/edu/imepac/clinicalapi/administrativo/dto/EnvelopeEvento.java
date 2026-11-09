@@ -7,13 +7,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+/** Envelope padrão de todo evento publicado na exchange adm.events. */
 public record EnvelopeEvento(
         UUID eventoId,
         String tipo,
         int versao,
         Instant ocorridoEm,
         String origem,
-        UUID agregadoId,
+        Long agregadoId,
         List<String> camposAlterados,
         JsonNode dados
 ) {

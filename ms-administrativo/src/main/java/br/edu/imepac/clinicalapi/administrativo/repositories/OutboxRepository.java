@@ -2,20 +2,11 @@ package br.edu.imepac.clinicalapi.administrativo.repositories;
 
 import br.edu.imepac.clinicalapi.administrativo.entities.OutboxEvento;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
-import java.util.UUID;
 
-public interface OutboxRepository extends JpaRepository<OutboxEvento, UUID> {
+public interface OutboxRepository extends JpaRepository<OutboxEvento, String> {
 
-    @Query(value = """
-            SELECT *
-            FROM outbox_evento
-            WHERE publicado_em IS NULL
-            ORDER BY criado_em ASC
-            LIMIT 100
-            FOR UPDATE SKIP LOCKED
-            """, nativeQuery = true)
-    List<OutboxEvento> buscarPendentesParaPublicacao();
+    /** Os 100 eventos pendentes mais antigos, na ordem em que aconteceram. */
+    List<OutboxEvento> findTop100ByPublicadoEmIsNullOrderByCriadoEmAsc();
 }
