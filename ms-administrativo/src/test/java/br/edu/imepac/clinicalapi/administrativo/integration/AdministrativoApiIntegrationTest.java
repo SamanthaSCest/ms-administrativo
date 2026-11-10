@@ -14,7 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import static br.edu.imepac.clinicalapi.administrativo.integration.AutenticacaoTestUtils.usuarioAutenticado;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -51,7 +51,6 @@ class AdministrativoApiIntegrationTest {
 
     private long criarEspecialidade(String nome) throws Exception {
         MvcResult result = mockMvc.perform(post("/especialidades")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"" + nome + "\",\"descricao\":\"d\"}"))
                 .andExpect(status().isCreated())
@@ -72,31 +71,24 @@ class AdministrativoApiIntegrationTest {
     void especialidade_crudCompleto() throws Exception {
         long id = criarEspecialidade("Cardiologia");
 
-        mockMvc.perform(get("/especialidades/{id}", id)
-                        .with(usuarioAutenticado()))
+        mockMvc.perform(get("/especialidades/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Cardiologia"))
                 .andExpect(jsonPath("$.dataCriacao").exists());
 
         mockMvc.perform(put("/especialidades/{id}", id)
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"Cardio\",\"descricao\":\"nova\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Cardio"));
 
-        mockMvc.perform(get("/especialidades")
-                        .with(usuarioAutenticado()))
+        mockMvc.perform(get("/especialidades"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.page.totalElements").value(1));
 
-        mockMvc.perform(delete("/especialidades/{id}", id)
-                        .with(usuarioAutenticado()))
-                .andExpect(status().isNoContent());
-
-        mockMvc.perform(get("/especialidades/{id}", id)
-                        .with(usuarioAutenticado()))
+        mockMvc.perform(delete("/especialidades/{id}", id)).andExpect(status().isNoContent());
+        mockMvc.perform(get("/especialidades/{id}", id))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.path").value("/especialidades/" + id));
@@ -107,7 +99,6 @@ class AdministrativoApiIntegrationTest {
         criarEspecialidade("Cardiologia");
 
         mockMvc.perform(post("/especialidades")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"cardiologia\"}"))
                 .andExpect(status().isConflict())
@@ -117,7 +108,6 @@ class AdministrativoApiIntegrationTest {
     @Test
     void especialidade_nomeEmBranco_retorna400ComDetalhes() throws Exception {
         mockMvc.perform(post("/especialidades")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -129,7 +119,6 @@ class AdministrativoApiIntegrationTest {
         long espId = criarEspecialidade("Cardiologia");
 
         MvcResult result = mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "12345678901", "CRM-1")))
                 .andExpect(status().isCreated())
@@ -137,8 +126,7 @@ class AdministrativoApiIntegrationTest {
                 .andReturn();
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
 
-        mockMvc.perform(get("/medicos/{id}", id)
-                        .with(usuarioAutenticado()))
+        mockMvc.perform(get("/medicos/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Maria Souza"))
                 .andExpect(jsonPath("$.crm").value("CRM-1"))
@@ -150,7 +138,6 @@ class AdministrativoApiIntegrationTest {
         long espId = criarEspecialidade("Cardiologia");
 
         mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "123", "CRM-1")))
                 .andExpect(status().isBadRequest())
@@ -160,7 +147,6 @@ class AdministrativoApiIntegrationTest {
     @Test
     void medico_especialidadeInexistente_retorna422() throws Exception {
         mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(9999, "12345678901", "CRM-1")))
                 .andExpect(status().isUnprocessableEntity());
@@ -169,16 +155,10 @@ class AdministrativoApiIntegrationTest {
     @Test
     void medico_crmDuplicado_retorna409() throws Exception {
         long espId = criarEspecialidade("Cardiologia");
+        mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
+                .content(medicoJson(espId, "12345678901", "CRM-1"))).andExpect(status().isCreated());
 
-        mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "12345678901", "CRM-1")))
-                .andExpect(status().isCreated());
-
-        mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "10987654321", "CRM-1")))
                 .andExpect(status().isConflict());
     }
@@ -186,60 +166,40 @@ class AdministrativoApiIntegrationTest {
     @Test
     void especialidade_comMedico_naoPodeSerRemovida() throws Exception {
         long espId = criarEspecialidade("Cardiologia");
+        mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
+                .content(medicoJson(espId, "12345678901", "CRM-1"))).andExpect(status().isCreated());
 
-        mockMvc.perform(post("/medicos")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "12345678901", "CRM-1")))
-                .andExpect(status().isCreated());
-
-        mockMvc.perform(delete("/especialidades/{id}", espId)
-                        .with(usuarioAutenticado()))
-                .andExpect(status().isConflict());
+        mockMvc.perform(delete("/especialidades/{id}", espId)).andExpect(status().isConflict());
     }
 
     @Test
     void paciente_crudBasico() throws Exception {
         String body = "{\"nome\":\"João Pereira\",\"cpf\":\"98765432100\",\"dataNascimento\":\"1990-01-15\"}";
 
-        MvcResult result = mockMvc.perform(post("/pacientes")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
+        MvcResult result = mockMvc.perform(post("/pacientes").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andReturn();
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
         assertThat(id).isPositive();
 
-        mockMvc.perform(get("/pacientes/{id}", id)
-                        .with(usuarioAutenticado()))
+        mockMvc.perform(get("/pacientes/{id}", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cpf").value("98765432100"));
 
-        mockMvc.perform(post("/pacientes")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
+        mockMvc.perform(post("/pacientes").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(delete("/pacientes/{id}", id)
-                        .with(usuarioAutenticado()))
-                .andExpect(status().isNoContent());
+        mockMvc.perform(delete("/pacientes/{id}", id)).andExpect(status().isNoContent());
     }
 
     @Test
     void jsonMalformado_retorna400() throws Exception {
-        mockMvc.perform(post("/pacientes")
-                        .with(usuarioAutenticado())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{nope"))
+        mockMvc.perform(post("/pacientes").contentType(MediaType.APPLICATION_JSON).content("{nope"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void idNaoNumerico_retorna400() throws Exception {
-        mockMvc.perform(get("/pacientes/abc")
-                        .with(usuarioAutenticado()))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/pacientes/abc")).andExpect(status().isBadRequest());
     }
 }
