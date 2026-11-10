@@ -15,12 +15,6 @@ spring:
       ddl-auto: validate   # o schema é gerenciado pelo Flyway (db/migration)
   flyway:
     enabled: true
-  # Keycloak: o serviço valida os tokens JWT emitidos pelo realm "clinica"
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/clinica}
   # RabbitMQ: eventos da outbox (exchange adm.events)
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
