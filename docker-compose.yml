@@ -59,6 +59,7 @@ services:
     image: clinical/ms-administrativo:latest
     container_name: ms-administrativo
     environment:
+      SERVER_PORT: 8081
       DB_URL: jdbc:mysql://mysql-administrativo:3306/clinical_administrativo?serverTimezone=UTC
       DB_USER: clinical
       DB_PASSWORD: clinical
