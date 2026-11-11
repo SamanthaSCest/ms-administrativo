@@ -63,8 +63,9 @@ public class SecurityConfig {
                         // Leituras para outros microserviços
                         .requestMatchers("/integracao/**").hasAnyRole("SERVICO", "ADMIN")
                         // Pacientes: equipe gerencia; médico e serviços consultam
-                        .requestMatchers(HttpMethod.GET, "/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
-                        .requestMatchers("/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO")
+                        .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
+                        .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
+                        .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
                         // Cadastros de apoio: todos consultam, só o administrador altera
                         .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**")
                         .authenticated()

@@ -1,0 +1,24 @@
+-- Paciente completo conforme o diagrama: sexo, telefone fixo, endereço (embutido) e responsável legal.
+CREATE TABLE responsaveis_legais (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    nome             VARCHAR(150) NOT NULL,
+    cpf              VARCHAR(11)  NOT NULL,
+    telefone         VARCHAR(20),
+    email            VARCHAR(150),
+    parentesco       VARCHAR(50)  NOT NULL,
+    data_criacao     DATETIME(6)  NOT NULL,
+    data_modificacao DATETIME(6)  NOT NULL,
+    CONSTRAINT uk_responsaveis_legais_cpf UNIQUE (cpf)
+);
+
+ALTER TABLE pacientes ADD COLUMN sexo VARCHAR(10);
+ALTER TABLE pacientes ADD COLUMN telefone_fixo VARCHAR(20);
+ALTER TABLE pacientes ADD COLUMN cep VARCHAR(8);
+ALTER TABLE pacientes ADD COLUMN logradouro VARCHAR(150);
+ALTER TABLE pacientes ADD COLUMN numero VARCHAR(10);
+ALTER TABLE pacientes ADD COLUMN complemento VARCHAR(60);
+ALTER TABLE pacientes ADD COLUMN bairro VARCHAR(80);
+ALTER TABLE pacientes ADD COLUMN cidade VARCHAR(80);
+ALTER TABLE pacientes ADD COLUMN uf VARCHAR(2);
+ALTER TABLE pacientes ADD COLUMN responsavel_id BIGINT;
+ALTER TABLE pacientes ADD CONSTRAINT fk_pacientes_responsavel FOREIGN KEY (responsavel_id) REFERENCES responsaveis_legais (id);
