@@ -5,6 +5,7 @@ import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ProcedimentoRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,7 @@ class ProcedimentoInsumoApiTest {
     private EspecialidadeRepository especialidadeRepository;
 
     @BeforeEach
+    @AfterEach  // não deixa procedimentos que impeçam outras classes de apagar especialidades
     void limpar() {
         procedimentoRepository.deleteAll();
         insumoRepository.deleteAll();

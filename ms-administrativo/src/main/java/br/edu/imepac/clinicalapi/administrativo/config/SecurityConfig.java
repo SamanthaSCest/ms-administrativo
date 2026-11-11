@@ -66,6 +66,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
                         .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
                         .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
+                        // Custos dos médicos: equipe e serviços (ex.: faturamento) consultam; só o admin altera
+                        .requestMatchers(HttpMethod.GET, "/custos-medicos/**").hasAnyRole("ADMIN", "FUNCIONARIO", "SERVICO")
+                        .requestMatchers("/custos-medicos/**").hasRole("ADMIN")
+                        // Disponibilidades: todos consultam (inclusive o ms-agendamento); o admin cadastra
+                        .requestMatchers(HttpMethod.GET, "/disponibilidades/**").authenticated()
+                        .requestMatchers("/disponibilidades/**").hasRole("ADMIN")
                         // Insumos: o ms-estoque (X-Api-Key) também cadastra e altera
                         .requestMatchers(HttpMethod.GET, "/insumos/**").authenticated()
                         .requestMatchers("/insumos/**").hasAnyRole("ADMIN", "SERVICO")

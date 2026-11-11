@@ -7,6 +7,7 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Insumo;
 import br.edu.imepac.clinicalapi.administrativo.entities.InsumoProcedimento;
 import br.edu.imepac.clinicalapi.administrativo.entities.Procedimento;
+import br.edu.imepac.clinicalapi.administrativo.repositories.CustoMedicoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ProcedimentoRepository;
@@ -41,6 +42,7 @@ public class ProcedimentoService {
     private final EspecialidadeRepository especialidadeRepository;
     private final InsumoRepository insumoRepository;
     private final InsumoService insumoService;
+    private final CustoMedicoRepository custoMedicoRepository;
     private final ModelMapper modelMapper;
 
     @Transactional
@@ -78,8 +80,12 @@ public class ProcedimentoService {
     @Transactional
     public void remover(Long id) {
         log.info("Removendo procedimento {}", id);
+        Procedimento procedimento = buscarEntidade(id);
+        if (custoMedicoRepository.existsByProcedimentoId(id)) {
+            throw new ConflictException("Procedimento possui custos de médicos e não pode ser removido");
+        }
         // Os insumos do procedimento são removidos em cascata (composição)
-        repository.delete(buscarEntidade(id));
+        repository.delete(procedimento);
     }
 
     /** Para outros services (custo médico): procedimento informado no corpo que não existe -> 422. */

@@ -3,6 +3,7 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 import br.edu.imepac.clinicalapi.administrativo.dto.SalaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.SalaResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Sala;
+import br.edu.imepac.clinicalapi.administrativo.repositories.DisponibilidadeMedicaRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.SalaRepository;
 import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
@@ -24,6 +25,7 @@ public class SalaService {
     private static final Logger log = LoggerFactory.getLogger(SalaService.class);
 
     private final SalaRepository repository;
+    private final DisponibilidadeMedicaRepository disponibilidadeRepository;
     private final ModelMapper modelMapper;
 
     @Transactional
@@ -59,7 +61,11 @@ public class SalaService {
     @Transactional
     public void remover(Long id) {
         log.info("Removendo sala {}", id);
-        repository.delete(buscarEntidade(id));
+        Sala sala = buscarEntidade(id);
+        if (disponibilidadeRepository.existsBySalaId(id)) {
+            throw new ConflictException("Sala possui disponibilidades médicas e não pode ser removida");
+        }
+        repository.delete(sala);
     }
 
     /** Para outros services: sala informada no corpo que não existe -> 422. */
