@@ -12,7 +12,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class MedicoRequest extends PessoaRequest {
+public class MedicoRequest extends ColaboradorRequest {
 
     @NotBlank(message = "é obrigatório")
     @Size(max = 20, message = "deve ter no máximo 20 caracteres")

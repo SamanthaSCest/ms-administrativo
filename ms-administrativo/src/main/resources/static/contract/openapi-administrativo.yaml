@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Clinical - ms-administrativo
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Contrato da API do **ms-administrativo** (cadastros base da clínica).
 
@@ -9,19 +9,305 @@ info:
     (ex.: ms-agendamento) podem se basear nele para consumir a API.
 
     Acesso direto: `http://localhost:8081` — via gateway: `http://localhost:8080/administrativo`.
+
+    ## Autenticação
+
+    Só a equipe da clínica acessa o sistema: **funcionários** (nível `ADMIN` ou `FUNCIONARIO`) e **médicos** (`MEDICO`).
+    Pacientes são apenas registros e **não têm login**.
+
+    1. Faça `POST /auth/login` com `login` e `senha`. Funcionários e médicos usam o **CPF** como login;
+       o administrador inicial é configurado por `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local: `admin`/`admin12345`).
+    2. Clique em **Authorize** e cole o `accessToken` em `bearerAuth` (sem o prefixo "Bearer").
+    3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
+       perfil sem permissão: **403** (ambos no formato `ErrorResponse`).
+
+    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`), com acesso só de leitura.
+
+    | Recurso | ADMIN | FUNCIONARIO | MEDICO | Serviço (X-Api-Key) |
+    |---|---|---|---|---|
+    | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | — |
+    | `/usuarios`, `/funcionarios` | ✔ | — | — | — |
+    | Especialidades e médicos (leitura) | ✔ | ✔ | ✔ | ✔ |
+    | Especialidades e médicos (escrita) | ✔ | — | — | — |
+    | Pacientes (leitura) | ✔ | ✔ | ✔ | ✔ |
+    | Pacientes (escrita) | ✔ | ✔ | — | — |
+    | `/integracao/**` | ✔ | — | — | ✔ |
 servers:
   - url: http://localhost:8081
     description: Direto no microserviço
   - url: http://localhost:8080/administrativo
     description: Via API Gateway
 tags:
+  - name: Autenticação
+    description: Login (JWT), dados do usuário logado e troca de senha
+  - name: Usuários
+    description: Gestão dos usuários de acesso (somente ADMIN)
+  - name: Funcionários
+    description: Cadastro da equipe da clínica com dados pessoais e profissionais (somente ADMIN)
   - name: Especialidades
   - name: Médicos
   - name: Pacientes
   - name: Integração
     description: Leituras para outros microserviços (somente leitura, CPF mascarado)
 
+# Por padrão toda operação exige Bearer token; exceções declaram "security" próprio
+security:
+  - bearerAuth: []
+
 paths:
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Autentica e devolve um token JWT
+      description: Rota pública. A mesma resposta 401 é dada para login inexistente, senha errada ou usuário inativo.
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/me:
+    get:
+      tags: [Autenticação]
+      summary: Dados do usuário dono do token
+      operationId: usuarioAutenticado
+      responses:
+        '200':
+          description: Usuário autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/senha:
+    put:
+      tags: [Autenticação]
+      summary: Troca a senha do usuário autenticado
+      operationId: alterarSenha
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlterarSenhaRequest'
+      responses:
+        '204':
+          description: Senha alterada
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Senha atual incorreta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /usuarios:
+    get:
+      tags: [Usuários]
+      summary: Lista usuários (paginado)
+      operationId: listarUsuarios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de usuários
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /usuarios/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Usuários]
+      summary: Busca usuário por id
+      operationId: buscarUsuario
+      responses:
+        '200':
+          description: Usuário encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /usuarios/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Usuários]
+      summary: Ativa ou desativa o acesso de um usuário
+      description: Usuário inativo não consegue fazer login. O administrador não pode desativar a si mesmo (422).
+      operationId: alterarStatusUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioStatusRequest'
+      responses:
+        '200':
+          description: Status alterado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /funcionarios:
+    get:
+      tags: [Funcionários]
+      summary: Lista funcionários (paginado)
+      operationId: listarFuncionarios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de funcionários
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Funcionários]
+      summary: Cadastra um funcionário e o seu usuário de acesso
+      description: |
+        Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
+        com perfil `FUNCIONARIO` (padrão) ou `ADMIN`. `senha` é obrigatória.
+      operationId: criarFuncionario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuncionarioRequest'
+      responses:
+        '201':
+          description: Criado. Header `Location` aponta para o recurso.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /funcionarios/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Funcionários]
+      summary: Busca funcionário por id
+      operationId: buscarFuncionario
+      responses:
+        '200':
+          description: Funcionário encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Funcionários]
+      summary: Atualiza um funcionário
+      description: Se `senha` for informada, a senha do usuário é trocada; o login acompanha o CPF.
+      operationId: atualizarFuncionario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuncionarioRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Funcionários]
+      summary: Remove um funcionário (e o seu usuário de acesso)
+      operationId: removerFuncionario
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /especialidades:
     get:
       tags: [Especialidades]
@@ -164,8 +450,11 @@ paths:
     get:
       tags: [Médicos]
       summary: Busca médico por id
-      description: Também usado pelo ms-agendamento para validar a existência do médico.
+      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do médico.
       operationId: buscarMedico
+      security:
+        - bearerAuth: []
+        - apiKey: []
       responses:
         '200':
           description: Médico encontrado
@@ -257,8 +546,11 @@ paths:
     get:
       tags: [Pacientes]
       summary: Busca paciente por id
-      description: Também usado pelo ms-agendamento para validar a existência do paciente.
+      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do paciente.
       operationId: buscarPaciente
+      security:
+        - bearerAuth: []
+        - apiKey: []
       responses:
         '200':
           description: Paciente encontrado
@@ -309,6 +601,9 @@ paths:
       summary: Resumo do paciente para outros microserviços
       description: CPF sempre mascarado (LGPD).
       operationId: integracaoBuscarPaciente
+      security:
+        - apiKey: []
+        - bearerAuth: []
       responses:
         '200':
           description: Resumo do paciente
@@ -326,6 +621,9 @@ paths:
       summary: Checagem rápida de existência do paciente
       description: Responde 200 mesmo quando o id não existe (existe = false), para o chamador não tratar como erro.
       operationId: integracaoSituacaoPaciente
+      security:
+        - apiKey: []
+        - bearerAuth: []
       responses:
         '200':
           description: Situação do paciente
@@ -340,6 +638,9 @@ paths:
       tags: [Integração]
       summary: Contato do paciente (para notificações)
       operationId: integracaoContatoPaciente
+      security:
+        - apiKey: []
+        - bearerAuth: []
       responses:
         '200':
           description: Contato do paciente
@@ -351,6 +652,18 @@ paths:
           $ref: '#/components/responses/NotFound'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token obtido em `POST /auth/login` (válido por 2 h por padrão).
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Chave de integração entre microserviços (`INTEGRACAO_API_KEY`). Acesso somente leitura.
+
   parameters:
     Id:
       name: id
@@ -403,6 +716,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     UnprocessableEntity:
       description: "Regra de negócio violada (ex.: especialidade informada não existe)"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Não autenticado (token ausente, inválido ou expirado) ou credenciais inválidas no login
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Autenticado, mas o perfil não tem permissão para esta operação
       content:
         application/json:
           schema:
@@ -525,6 +850,8 @@ components:
         especialidadeId:
           type: integer
           format: int64
+        senha:
+          $ref: '#/components/schemas/SenhaPessoa'
     MedicoResponse:
       type: object
       properties:
@@ -546,6 +873,8 @@ components:
           type: string
         especialidade:
           $ref: '#/components/schemas/EspecialidadeResponse'
+        usuario:
+          $ref: '#/components/schemas/UsuarioResponse'
         dataCriacao:
           type: string
           format: date-time
@@ -649,3 +978,191 @@ components:
           type: string
         telefone:
           type: string
+
+    # ---------- Autenticação e usuários ----------
+    Perfil:
+      type: string
+      enum: [ADMIN, FUNCIONARIO, MEDICO]
+      description: Nível de acesso do usuário (vira ROLE_<perfil> na API). Paciente não tem acesso.
+    SenhaPessoa:
+      type: string
+      format: password
+      minLength: 8
+      maxLength: 72
+      writeOnly: true
+      description: |
+        Senha do usuário de acesso (login = CPF). **Obrigatória no cadastro (POST)**; na atualização (PUT),
+        se informada, troca a senha. Armazenada apenas como hash BCrypt.
+      example: senhaForte1
+    LoginRequest:
+      type: object
+      required: [login, senha]
+      properties:
+        login:
+          type: string
+          description: CPF (médico ou funcionário) ou login do administrador inicial
+          example: admin
+        senha:
+          type: string
+          format: password
+          example: admin12345
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: JWT (HS256) com os claims sub (login), uid, perfil, iss, iat e exp
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          format: int64
+          description: Validade do token em segundos
+          example: 7200
+        usuario:
+          $ref: '#/components/schemas/UsuarioResponse'
+    AlterarSenhaRequest:
+      type: object
+      required: [senhaAtual, novaSenha]
+      properties:
+        senhaAtual:
+          type: string
+          format: password
+        novaSenha:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+    UsuarioResponse:
+      type: object
+      description: Usuário de acesso (a senha nunca é devolvida)
+      properties:
+        id:
+          type: integer
+          format: int64
+        login:
+          type: string
+          example: '12345678901'
+        perfil:
+          $ref: '#/components/schemas/Perfil'
+        ativo:
+          type: boolean
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    UsuarioPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsuarioResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+    UsuarioStatusRequest:
+      type: object
+      required: [ativo]
+      properties:
+        ativo:
+          type: boolean
+          example: false
+
+    # ---------- Funcionários ----------
+    FuncionarioRequest:
+      type: object
+      required: [nome, cpf, dataNascimento, matricula, cargo, dataAdmissao]
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          example: Ana Lima
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+          example: '11122233344'
+        email:
+          type: string
+          format: email
+          maxLength: 150
+          example: ana@clinica.com
+        telefone:
+          type: string
+          maxLength: 20
+          example: '34999990000'
+        dataNascimento:
+          type: string
+          format: date
+          description: Deve estar no passado
+          example: '1992-03-10'
+        matricula:
+          type: string
+          maxLength: 20
+          description: Única por funcionário
+          example: F-001
+        cargo:
+          type: string
+          maxLength: 100
+          example: Recepcionista
+        setor:
+          type: string
+          maxLength: 100
+          example: Recepção
+        dataAdmissao:
+          type: string
+          format: date
+          description: Não pode estar no futuro
+          example: '2024-02-01'
+        perfil:
+          type: string
+          enum: [ADMIN, FUNCIONARIO]
+          default: FUNCIONARIO
+          description: Perfil de acesso do funcionário. Outros valores resultam em 422.
+        senha:
+          $ref: '#/components/schemas/SenhaPessoa'
+    FuncionarioResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        cpf:
+          type: string
+        email:
+          type: string
+        telefone:
+          type: string
+        dataNascimento:
+          type: string
+          format: date
+        matricula:
+          type: string
+        cargo:
+          type: string
+        setor:
+          type: string
+        dataAdmissao:
+          type: string
+          format: date
+        usuario:
+          $ref: '#/components/schemas/UsuarioResponse'
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    FuncionarioPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/FuncionarioResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'

@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -25,10 +26,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Sobe o contexto completo (Spring + JPA + Flyway em H2) e exercita a API via HTTP simulado. */
+/**
+ * Sobe o contexto completo (Spring + JPA + Flyway em H2) e exercita a API via HTTP simulado.
+ * Roda como ADMIN (@WithMockUser); as regras de acesso são testadas em AuthApiIntegrationTest.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@WithMockUser(username = "admin", roles = "ADMIN")
 class AdministrativoApiIntegrationTest {
 
     @Autowired
@@ -63,7 +68,7 @@ class AdministrativoApiIntegrationTest {
     private String medicoJson(long especialidadeId, String cpf, String crm) {
         return """
                 {"nome":"Maria Souza","cpf":"%s","email":"maria@clinica.com","telefone":"18999999999",
-                 "dataNascimento":"1985-04-20","crm":"%s","especialidadeId":%d}
+                 "dataNascimento":"1985-04-20","crm":"%s","especialidadeId":%d,"senha":"senhaForte1"}
                 """.formatted(cpf, crm, especialidadeId);
     }
 
@@ -184,7 +189,9 @@ class AdministrativoApiIntegrationTest {
 
         mockMvc.perform(get("/pacientes/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value("98765432100"));
+                .andExpect(jsonPath("$.cpf").value("98765432100"))
+                // Paciente não acessa o sistema: não tem usuário
+                .andExpect(jsonPath("$.usuario").doesNotExist());
 
         mockMvc.perform(post("/pacientes").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isConflict());

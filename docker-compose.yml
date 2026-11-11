@@ -66,6 +66,11 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: clinical
       RABBITMQ_PASSWORD: clinical
+      # Autenticação (valores de desenvolvimento; sobrescreva com um arquivo .env fora do ambiente local)
+      JWT_SECRET: ${JWT_SECRET:-dev-only-troque-este-segredo-jwt-com-32+-caracteres}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      INTEGRACAO_API_KEY: ${INTEGRACAO_API_KEY:-dev-integracao-key}
     ports:
       - "8081:8081"
     depends_on:
@@ -91,6 +96,7 @@ services:
       DB_USER: clinical
       DB_PASSWORD: clinical
       ADMINISTRATIVO_URL: http://ms-administrativo:8081
+      ADMINISTRATIVO_API_KEY: ${INTEGRACAO_API_KEY:-dev-integracao-key}
     ports:
       - "8082:8082"
     depends_on:

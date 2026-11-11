@@ -8,7 +8,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class MedicoResponse extends PessoaResponse {
+public class MedicoResponse extends ColaboradorResponse {
 
     private String crm;
     private EspecialidadeResponse especialidade;

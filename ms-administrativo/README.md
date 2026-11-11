@@ -61,3 +61,54 @@ Além dos CRUDs de Especialidade, Médico e Paciente do modelo, este módulo tra
 
 O RabbitMQ sobe junto no `docker compose` (painel em http://localhost:15672, usuário `clinical`/`clinical`).
 Nos testes o publicador fica desligado (`outbox.publicador.habilitado: false`).
+
+## Autenticação e cadastro de funcionários
+
+> "Como administrador, quero cadastrar funcionários com seus dados pessoais e profissionais, para manter a equipe registrada no sistema."
+
+### Modelagem
+
+```text
+Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, dataNascimento)
+  id, login (único)             ├── Medico      (medicos)       + crm, especialidade, usuario  -> perfil MEDICO
+  senha (hash BCrypt)           ├── Funcionario (funcionarios)  + matricula, cargo, setor,     -> perfil ADMIN ou FUNCIONARIO
+  perfil, ativo                 │                                 dataAdmissao, usuario
+        ^                       └── Paciente    (pacientes)     sem usuário: não acessa o sistema
+        └──── 1:1 (usuario_id, único) em medicos e funcionarios
+```
+
+- Só a **equipe** acessa o sistema. Médicos e funcionários implementam `PossuiUsuario` e têm **um** usuário (`@OneToOne`, cascata). O login é o **CPF**; a senha vai no próprio cadastro (`senha`, obrigatória no POST).
+- **Paciente não tem login**: é apenas um registro, e o cadastro não pede senha.
+- Remover o médico ou o funcionário remove o usuário. Mudar o CPF muda o login.
+- Um mesmo CPF só pode ter um usuário: cadastrar um médico com o CPF de um funcionário retorna 409. Um funcionário pode ter o mesmo CPF de um paciente.
+- O **administrador inicial** (sem pessoa vinculada) é criado na inicialização por `config/AdminInicializador`, a partir de `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local `admin`/`admin12345`). Outros admins são funcionários com `"perfil": "ADMIN"`.
+- Migration: `db/migration/V3__criar_usuarios_e_funcionarios.sql` (médicos antigos ficam com `usuario_id` nulo até receberem senha num PUT).
+
+### Endpoints
+
+| Método e rota | Quem | Descrição |
+|---|---|---|
+| `POST /auth/login` | público | `{login, senha}` → `{accessToken, tokenType, expiresIn, usuario}` |
+| `GET /auth/me` | autenticado | Dados do usuário do token |
+| `PUT /auth/senha` | autenticado | `{senhaAtual, novaSenha}` |
+| `GET /usuarios`, `GET /usuarios/{id}` | ADMIN | Consulta usuários |
+| `PATCH /usuarios/{id}/status` | ADMIN | `{ativo}`: bloqueia/libera o login (não pode desativar a si mesmo) |
+| `/funcionarios` (CRUD) | ADMIN | Cadastro de funcionários + usuário |
+
+A matriz completa de permissões está na descrição do contrato (`static/contract/openapi-administrativo.yaml`) e em `config/SecurityConfig`.
+
+### Como funciona
+
+- JWT **HS256** emitido pelo próprio serviço (`services/TokenService`) e validado pelo Spring Security Resource Server (`config/SecurityConfig`). O claim `perfil` vira `ROLE_<perfil>`.
+- Erros de segurança (401/403) saem no mesmo formato `ErrorResponse` (`config/SegurancaErrorHandler`).
+- Serviço-a-serviço: o ms-agendamento envia `X-Api-Key` (`config/ApiKeyAuthenticationFilter`) e recebe o perfil `SERVICO` (somente leitura).
+- Swagger UI: http://localhost:8081/swagger-ui.html → `POST /auth/login` → botão **Authorize** → cole o `accessToken`.
+
+| Variável | Padrão (só desenvolvimento) | Uso |
+|---|---|---|
+| `JWT_SECRET` | `dev-only-troque-...` | Segredo HMAC, mínimo 32 bytes |
+| `JWT_EXPIRACAO` | `2h` | Validade do token |
+| `ADMIN_LOGIN` / `ADMIN_PASSWORD` | `admin` / `admin12345` | Administrador inicial |
+| `INTEGRACAO_API_KEY` | `dev-integracao-key` | Chave `X-Api-Key` (no ms-agendamento: `ADMINISTRATIVO_API_KEY`) |
+
+Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUser`; o fluxo real (login, token, perfis, API key) está em `AuthApiIntegrationTest`.
