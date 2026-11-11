@@ -65,9 +65,10 @@ public class SecurityConfig {
                         // Pacientes: equipe gerencia; médico e serviços consultam
                         .requestMatchers(HttpMethod.GET, "/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
                         .requestMatchers("/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO")
-                        // Médicos e especialidades: todos consultam, só o administrador altera
-                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**").authenticated()
-                        .requestMatchers("/medicos/**", "/especialidades/**").hasRole("ADMIN")
+                        // Cadastros de apoio: todos consultam, só o administrador altera
+                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**")
+                        .authenticated()
+                        .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
