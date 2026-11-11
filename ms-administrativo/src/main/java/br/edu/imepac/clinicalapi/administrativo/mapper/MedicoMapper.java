@@ -6,9 +6,11 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.Comparator;
+
 /**
- * Mapper de Médico. Atenção: especialidadeId (request) vira o objeto Especialidade no service,
- * por isso o campo "especialidade" é ignorado aqui (skip).
+ * Mapper de Médico. Atenção: especialidadeIds (request) vira o conjunto de Especialidade no service,
+ * por isso o campo "especialidades" é ignorado aqui (skip).
  */
 @Component
 public class MedicoMapper {
@@ -17,9 +19,11 @@ public class MedicoMapper {
 
     public MedicoMapper(ModelMapper modelMapper) {
         this.modelMapper = modelMapper;
-        // especialidade é resolvida pelo service a partir de especialidadeId (não pelo mapper)
-        this.modelMapper.typeMap(MedicoRequest.class, Medico.class)
-                .addMappings(m -> m.skip(Medico::setEspecialidade));
+        if (this.modelMapper.getTypeMap(MedicoRequest.class, Medico.class) == null) {
+            this.modelMapper.emptyTypeMap(MedicoRequest.class, Medico.class)
+                    .addMappings(m -> m.skip(Medico::setEspecialidades))
+                    .implicitMappings();
+        }
     }
 
     public Medico toEntity(MedicoRequest request) {
@@ -31,6 +35,11 @@ public class MedicoMapper {
     }
 
     public MedicoResponse toResponse(Medico entity) {
-        return modelMapper.map(entity, MedicoResponse.class);
+        MedicoResponse response = modelMapper.map(entity, MedicoResponse.class);
+        // Ordem estável na resposta (o Set da entidade não tem ordem)
+        if (response.getEspecialidades() != null) {
+            response.getEspecialidades().sort(Comparator.comparing(e -> e.getNome()));
+        }
+        return response;
     }
 }

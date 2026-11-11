@@ -68,7 +68,7 @@ class AdministrativoApiIntegrationTest {
     private String medicoJson(long especialidadeId, String cpf, String crm) {
         return """
                 {"nome":"Maria Souza","cpf":"%s","email":"maria@clinica.com","telefone":"18999999999",
-                 "dataNascimento":"1985-04-20","crm":"%s","especialidadeId":%d,"senha":"senhaForte1"}
+                 "dataNascimento":"1985-04-20","crm":"%s","ufCrm":"SP","especialidadeIds":[%d],"senha":"senhaForte1"}
                 """.formatted(cpf, crm, especialidadeId);
     }
 
@@ -127,7 +127,7 @@ class AdministrativoApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "12345678901", "CRM-1")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.especialidade.nome").value("Cardiologia"))
+                .andExpect(jsonPath("$.especialidades[0].nome").value("Cardiologia"))
                 .andReturn();
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
 
@@ -135,7 +135,7 @@ class AdministrativoApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nome").value("Maria Souza"))
                 .andExpect(jsonPath("$.crm").value("CRM-1"))
-                .andExpect(jsonPath("$.especialidade.id").value(espId));
+                .andExpect(jsonPath("$.especialidades[0].id").value(espId));
     }
 
     @Test

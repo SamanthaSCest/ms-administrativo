@@ -97,7 +97,7 @@ class EspecialidadeServiceTest {
     void remover_comMedicosVinculados_deveLancarConflict() {
         Especialidade existente = new Especialidade();
         when(repository.findById(1L)).thenReturn(Optional.of(existente));
-        when(medicoRepository.existsByEspecialidadeId(1L)).thenReturn(true);
+        when(medicoRepository.existsByEspecialidadesId(1L)).thenReturn(true);
 
         assertThatThrownBy(() -> service.remover(1L)).isInstanceOf(ConflictException.class);
         verify(repository, never()).delete(any());
@@ -107,7 +107,7 @@ class EspecialidadeServiceTest {
     void remover_semVinculos_deveExcluir() {
         Especialidade existente = new Especialidade();
         when(repository.findById(1L)).thenReturn(Optional.of(existente));
-        when(medicoRepository.existsByEspecialidadeId(1L)).thenReturn(false);
+        when(medicoRepository.existsByEspecialidadesId(1L)).thenReturn(false);
 
         service.remover(1L);
 

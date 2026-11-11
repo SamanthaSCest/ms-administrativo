@@ -77,7 +77,7 @@ public class EspecialidadeService {
         log.info("Removendo especialidade {}", id);
         Especialidade entidade = buscarEntidade(id);
         // Integridade: não remover especialidade que ainda tem médicos
-        if (medicoRepository.existsByEspecialidadeId(id)) {
+        if (medicoRepository.existsByEspecialidadesId(id)) {
             log.warn("Especialidade {} possui médicos vinculados", id);
             throw new ConflictException("Especialidade possui médicos vinculados e não pode ser removida");
         }

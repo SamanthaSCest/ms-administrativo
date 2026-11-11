@@ -3,12 +3,12 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 import br.edu.imepac.clinicalapi.administrativo.config.ModelMapperConfig;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioResponse;
+import br.edu.imepac.clinicalapi.administrativo.entities.Cargo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
 import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.entities.Usuario;
 import br.edu.imepac.clinicalapi.administrativo.mapper.FuncionarioMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
-import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,14 +47,14 @@ class FuncionarioServiceTest {
         r.setCpf("11122233344");
         r.setDataNascimento(LocalDate.of(1992, 3, 10));
         r.setMatricula("F-001");
-        r.setCargo("Recepcionista");
+        r.setCargo(Cargo.RECEPCIONISTA);
         r.setDataAdmissao(LocalDate.of(2024, 2, 1));
         r.setSenha("funcSenha123");
         return r;
     }
 
     @Test
-    void criar_semPerfil_criaUsuarioFuncionario() {
+    void criar_recepcionista_criaUsuarioFuncionario() {
         Usuario usuario = new Usuario();
         usuario.setLogin("11122233344");
         usuario.setPerfil(Perfil.FUNCIONARIO);
@@ -69,17 +69,19 @@ class FuncionarioServiceTest {
 
         assertThat(response.getId()).isEqualTo(7L);
         assertThat(response.getMatricula()).isEqualTo("F-001");
-        assertThat(response.getCargo()).isEqualTo("Recepcionista");
+        assertThat(response.getCargo()).isEqualTo(Cargo.RECEPCIONISTA);
         assertThat(response.getUsuario().getPerfil()).isEqualTo(Perfil.FUNCIONARIO);
     }
 
     @Test
-    void criar_perfilMedico_deveLancarBusinessRule() {
+    void criar_administrador_criaUsuarioAdmin() {
         FuncionarioRequest r = request();
-        r.setPerfil(Perfil.MEDICO);
+        r.setCargo(Cargo.ADMINISTRADOR);
+        when(repository.save(any(Funcionario.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.criar(r)).isInstanceOf(BusinessRuleException.class);
-        verify(repository, never()).save(any());
+        service.criar(r);
+
+        verify(usuarioService).novoUsuario("11122233344", "funcSenha123", Perfil.ADMIN);
     }
 
     @Test

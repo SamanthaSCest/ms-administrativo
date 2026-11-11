@@ -1,6 +1,7 @@
 package br.edu.imepac.clinicalapi.administrativo.repositories;
 
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
+import br.edu.imepac.clinicalapi.administrativo.entities.UF;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
@@ -12,9 +13,10 @@ public interface MedicoRepository extends JpaRepository<Medico, Long> {
 
     boolean existsByCpfAndIdNot(String cpf, Long id);
 
-    boolean existsByCrm(String crm);
+    boolean existsByCrmAndUfCrm(String crm, UF ufCrm);
 
-    boolean existsByCrmAndIdNot(String crm, Long id);
+    boolean existsByCrmAndUfCrmAndIdNot(String crm, UF ufCrm, Long id);
 
-    boolean existsByEspecialidadeId(Long especialidadeId);
+    /** Algum médico atende a especialidade? (navega pela coleção especialidades) */
+    boolean existsByEspecialidadesId(Long especialidadeId);
 }

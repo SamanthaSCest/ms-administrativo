@@ -19,8 +19,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
- * Regras de negócio de Médico: unicidade de CPF/CRM e existência da especialidade.
+ * Regras de negócio de Médico: unicidade de CPF e de CRM por UF, e existência das especialidades.
  */
 @Service
 @RequiredArgsConstructor
@@ -38,18 +41,18 @@ public class MedicoService {
 
     @Transactional
     public MedicoResponse criar(MedicoRequest request) {
-        log.info("Criando médico CRM {}", request.getCrm());
+        log.info("Criando médico CRM {}/{}", request.getCrm(), request.getUfCrm());
         // Regras de unicidade -> 409 Conflict
         if (repository.existsByCpf(request.getCpf())) {
             log.warn("CPF de médico já cadastrado");
             throw new ConflictException("Já existe médico com o CPF informado");
         }
-        if (repository.existsByCrm(request.getCrm())) {
-            throw new ConflictException("Já existe médico com o CRM: " + request.getCrm());
+        if (repository.existsByCrmAndUfCrm(request.getCrm(), request.getUfCrm())) {
+            throw new ConflictException("Já existe médico com o CRM: " + request.getCrm() + "/" + request.getUfCrm());
         }
         Medico medico = mapper.toEntity(request);
-        // O mapper não preenche a especialidade: buscamos pelo id informado (422 se não existir)
-        medico.setEspecialidade(buscarEspecialidade(request.getEspecialidadeId()));
+        // O mapper não preenche as especialidades: buscamos pelos ids informados (422 se algum não existir)
+        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds()));
         // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
         medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
         log.debug("Salvando médico {}", medico.getNome());
@@ -73,12 +76,12 @@ public class MedicoService {
         if (repository.existsByCpfAndIdNot(request.getCpf(), id)) {
             throw new ConflictException("Já existe médico com o CPF informado");
         }
-        if (repository.existsByCrmAndIdNot(request.getCrm(), id)) {
-            throw new ConflictException("Já existe médico com o CRM: " + request.getCrm());
+        if (repository.existsByCrmAndUfCrmAndIdNot(request.getCrm(), request.getUfCrm(), id)) {
+            throw new ConflictException("Já existe médico com o CRM: " + request.getCrm() + "/" + request.getUfCrm());
         }
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
-        medico.setEspecialidade(buscarEspecialidade(request.getEspecialidadeId()));
+        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds()));
         usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
         return mapper.toResponse(repository.save(medico));
     }
@@ -89,13 +92,23 @@ public class MedicoService {
         repository.delete(buscarEntidade(id));
     }
 
+    /** Para outros services (custos, disponibilidade): médico informado no corpo que não existe -> 422. */
+    @Transactional(readOnly = true)
+    public Medico buscarReferencia(Long id) {
+        return repository.findById(id).orElseThrow(() -> new BusinessRuleException("Médico não encontrado: " + id));
+    }
+
     private Medico buscarEntidade(Long id) {
         return repository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Médico", id));
     }
 
-    private Especialidade buscarEspecialidade(Long id) {
-        return especialidadeRepository.findById(id)
-                // 422 (e não 404): o recurso da URL existe, mas um dado do corpo referencia algo inválido
-                .orElseThrow(() -> new BusinessRuleException("Especialidade não encontrada: " + id));
+    private Set<Especialidade> buscarEspecialidades(Set<Long> ids) {
+        Set<Especialidade> especialidades = new HashSet<>();
+        for (Long id : ids) {
+            especialidades.add(especialidadeRepository.findById(id)
+                    // 422 (e não 404): o recurso da URL existe, mas um dado do corpo referencia algo inválido
+                    .orElseThrow(() -> new BusinessRuleException("Especialidade não encontrada: " + id)));
+        }
+        return especialidades;
     }
 }

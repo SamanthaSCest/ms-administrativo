@@ -5,6 +5,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
+import br.edu.imepac.clinicalapi.administrativo.entities.UF;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,7 +54,8 @@ class MedicoServiceTest {
         r.setEmail("maria@clinica.com");
         r.setDataNascimento(LocalDate.of(1985, 4, 20));
         r.setCrm("CRM-123");
-        r.setEspecialidadeId(5L);
+        r.setUfCrm(UF.SP);
+        r.setEspecialidadeIds(Set.of(5L));
         return r;
     }
 
@@ -66,7 +69,7 @@ class MedicoServiceTest {
     @Test
     void criar_deveMapearERetornarComEspecialidade() {
         when(repository.existsByCpf("12345678901")).thenReturn(false);
-        when(repository.existsByCrm("CRM-123")).thenReturn(false);
+        when(repository.existsByCrmAndUfCrm("CRM-123", UF.SP)).thenReturn(false);
         when(especialidadeRepository.findById(5L)).thenReturn(Optional.of(especialidade()));
         when(repository.save(any(Medico.class))).thenAnswer(inv -> {
             Medico m = inv.getArgument(0);
@@ -79,8 +82,8 @@ class MedicoServiceTest {
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getNome()).isEqualTo("Maria Souza");
         assertThat(response.getCrm()).isEqualTo("CRM-123");
-        assertThat(response.getEspecialidade().getId()).isEqualTo(5L);
-        assertThat(response.getEspecialidade().getNome()).isEqualTo("Cardiologia");
+        assertThat(response.getEspecialidades().get(0).getId()).isEqualTo(5L);
+        assertThat(response.getEspecialidades().get(0).getNome()).isEqualTo("Cardiologia");
     }
 
     @Test
@@ -94,7 +97,7 @@ class MedicoServiceTest {
     @Test
     void criar_crmDuplicado_deveLancarConflict() {
         when(repository.existsByCpf("12345678901")).thenReturn(false);
-        when(repository.existsByCrm("CRM-123")).thenReturn(true);
+        when(repository.existsByCrmAndUfCrm("CRM-123", UF.SP)).thenReturn(true);
 
         assertThatThrownBy(() -> service.criar(request())).isInstanceOf(ConflictException.class);
     }
@@ -127,6 +130,6 @@ class MedicoServiceTest {
 
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getNome()).isEqualTo("Maria Souza");
-        assertThat(response.getEspecialidade().getId()).isEqualTo(5L);
+        assertThat(response.getEspecialidades().get(0).getId()).isEqualTo(5L);
     }
 }

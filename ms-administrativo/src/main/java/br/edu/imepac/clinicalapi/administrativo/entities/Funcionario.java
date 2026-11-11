@@ -3,6 +3,8 @@ package br.edu.imepac.clinicalapi.administrativo.entities;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -12,8 +14,8 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 /**
- * Funcionário = Pessoa (dados pessoais) + dados profissionais. O nível de acesso
- * (ADMIN ou FUNCIONARIO) fica no Usuario vinculado.
+ * Funcionário = Pessoa (dados pessoais) + dados profissionais. O cargo define o nível de acesso
+ * do usuário vinculado (ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO).
  */
 @Getter
 @Setter
@@ -24,8 +26,9 @@ public class Funcionario extends Pessoa implements PossuiUsuario {
     @Column(nullable = false, unique = true, length = 20)
     private String matricula;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 100)
-    private String cargo;
+    private Cargo cargo;
 
     @Column(length = 100)
     private String setor;
@@ -37,4 +40,8 @@ public class Funcionario extends Pessoa implements PossuiUsuario {
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "usuario_id", unique = true)
     private Usuario usuario;
+
+    public boolean possuiCargo(Cargo cargo) {
+        return this.cargo == cargo;
+    }
 }
