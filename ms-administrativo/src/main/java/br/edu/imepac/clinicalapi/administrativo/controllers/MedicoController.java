@@ -3,7 +3,10 @@ package br.edu.imepac.clinicalapi.administrativo.controllers;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.services.MedicoService;
+import br.edu.imepac.clinicalapi.administrativo.validation.OnCreate;
 import jakarta.validation.Valid;
+import jakarta.validation.groups.Default;
+import org.springframework.validation.annotation.Validated;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,9 +31,10 @@ public class MedicoController {
 
     private final MedicoService service;
 
-    // @Valid dispara o Bean Validation do DTO; se falhar => MethodArgumentNotValidException => 400
+    // @Validated dispara o Bean Validation do DTO; se falhar => MethodArgumentNotValidException => 400.
+    // O grupo OnCreate torna a senha obrigatória só no cadastro.
     @PostMapping
-    public ResponseEntity<MedicoResponse> criar(@Valid @RequestBody MedicoRequest request) {
+    public ResponseEntity<MedicoResponse> criar(@Validated({Default.class, OnCreate.class}) @RequestBody MedicoRequest request) {
         MedicoResponse criado = service.criar(request);
         // Boas práticas REST: 201 Created + header Location apontando para o novo recurso
         URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(criado.getId()).toUri();

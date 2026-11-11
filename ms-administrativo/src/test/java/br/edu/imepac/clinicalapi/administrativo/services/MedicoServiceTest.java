@@ -34,13 +34,15 @@ class MedicoServiceTest {
     private MedicoRepository repository;
     @Mock
     private EspecialidadeRepository especialidadeRepository;
+    @Mock
+    private UsuarioService usuarioService;
 
     private MedicoService service;
 
     @BeforeEach
     void setUp() {
         MedicoMapper mapper = new MedicoMapper(new ModelMapperConfig().modelMapper());
-        service = new MedicoService(repository, especialidadeRepository, mapper);
+        service = new MedicoService(repository, especialidadeRepository, mapper, usuarioService);
     }
 
     private MedicoRequest request() {

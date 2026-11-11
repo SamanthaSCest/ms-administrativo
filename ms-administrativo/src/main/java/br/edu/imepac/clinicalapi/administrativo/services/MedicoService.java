@@ -6,6 +6,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
+import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
@@ -33,6 +34,7 @@ public class MedicoService {
     private final MedicoRepository repository;
     private final EspecialidadeRepository especialidadeRepository;
     private final MedicoMapper mapper;
+    private final UsuarioService usuarioService;
 
     @Transactional
     public MedicoResponse criar(MedicoRequest request) {
@@ -48,6 +50,8 @@ public class MedicoService {
         Medico medico = mapper.toEntity(request);
         // O mapper não preenche a especialidade: buscamos pelo id informado (422 se não existir)
         medico.setEspecialidade(buscarEspecialidade(request.getEspecialidadeId()));
+        // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
+        medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
         log.debug("Salvando médico {}", medico.getNome());
         return mapper.toResponse(repository.save(medico));
     }
@@ -75,6 +79,7 @@ public class MedicoService {
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
         medico.setEspecialidade(buscarEspecialidade(request.getEspecialidadeId()));
+        usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
         return mapper.toResponse(repository.save(medico));
     }
 
