@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -38,7 +39,10 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
                 && MessageDigest.isEqual(chaveEsperada, recebida.getBytes(StandardCharsets.UTF_8))) {
             var auth = new UsernamePasswordAuthenticationToken(PRINCIPAL, null,
                     AuthorityUtils.createAuthorityList("ROLE_SERVICO"));
-            SecurityContextHolder.getContext().setAuthentication(auth);
+            // Contexto novo (e não getContext().setAuthentication): não altera um contexto compartilhado
+            SecurityContext contexto = SecurityContextHolder.createEmptyContext();
+            contexto.setAuthentication(auth);
+            SecurityContextHolder.setContext(contexto);
         }
         chain.doFilter(request, response);
     }

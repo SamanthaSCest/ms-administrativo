@@ -66,10 +66,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
                         .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
                         .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
+                        // Insumos: o ms-estoque (X-Api-Key) também cadastra e altera
+                        .requestMatchers(HttpMethod.GET, "/insumos/**").authenticated()
+                        .requestMatchers("/insumos/**").hasAnyRole("ADMIN", "SERVICO")
                         // Cadastros de apoio: todos consultam, só o administrador altera
-                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**")
+                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
+                                "/procedimentos/**")
                         .authenticated()
-                        .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**").hasRole("ADMIN")
+                        .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
+                                "/procedimentos/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

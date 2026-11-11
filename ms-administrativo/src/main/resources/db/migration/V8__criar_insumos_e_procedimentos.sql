@@ -1,0 +1,38 @@
+-- Insumos, procedimentos (código TUSS) e os insumos consumidos por procedimento.
+CREATE TABLE insumos (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    codigo           VARCHAR(30)    NOT NULL,
+    nome             VARCHAR(150)   NOT NULL,
+    descricao        VARCHAR(255),
+    unidade_medida   VARCHAR(20)    NOT NULL,
+    custo_unitario   DECIMAL(12, 4) NOT NULL,
+    data_criacao     DATETIME(6)    NOT NULL,
+    data_modificacao DATETIME(6)    NOT NULL,
+    CONSTRAINT uk_insumos_codigo UNIQUE (codigo)
+);
+
+CREATE TABLE procedimentos (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    especialidade_id BIGINT         NOT NULL,
+    codigo_tuss      VARCHAR(20)    NOT NULL,
+    nome             VARCHAR(150)   NOT NULL,
+    descricao        VARCHAR(255),
+    duracao_minutos  INT            NOT NULL,
+    valor_base       DECIMAL(12, 2) NOT NULL,
+    data_criacao     DATETIME(6)    NOT NULL,
+    data_modificacao DATETIME(6)    NOT NULL,
+    CONSTRAINT uk_procedimentos_codigo_tuss UNIQUE (codigo_tuss),
+    CONSTRAINT fk_procedimentos_especialidade FOREIGN KEY (especialidade_id) REFERENCES especialidades (id)
+);
+
+CREATE TABLE insumos_procedimento (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    procedimento_id  BIGINT         NOT NULL,
+    insumo_id        BIGINT         NOT NULL,
+    quantidade       DECIMAL(12, 3) NOT NULL,
+    data_criacao     DATETIME(6)    NOT NULL,
+    data_modificacao DATETIME(6)    NOT NULL,
+    CONSTRAINT uk_insumos_procedimento UNIQUE (procedimento_id, insumo_id),
+    CONSTRAINT fk_insumos_procedimento_procedimento FOREIGN KEY (procedimento_id) REFERENCES procedimentos (id),
+    CONSTRAINT fk_insumos_procedimento_insumo FOREIGN KEY (insumo_id) REFERENCES insumos (id)
+);
