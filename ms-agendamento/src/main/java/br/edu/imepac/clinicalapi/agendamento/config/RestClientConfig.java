@@ -25,4 +25,17 @@ public class RestClientConfig {
             builder.requestFactory(factory);
         };
     }
+
+    /**
+     * O ms-administrativo exige autenticação: chamadas entre serviços enviam a chave no header X-Api-Key
+     * (lá vira o perfil SERVICO, com acesso de leitura a médicos e pacientes).
+     */
+    @Bean
+    public RestClientCustomizer restClientApiKey(@Value("${clients.administrativo.api-key:}") String apiKey) {
+        return builder -> {
+            if (!apiKey.isBlank()) {
+                builder.defaultHeader("X-Api-Key", apiKey);
+            }
+        };
+    }
 }

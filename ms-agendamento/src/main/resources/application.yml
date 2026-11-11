@@ -41,5 +41,7 @@ logging:
 clients:
   administrativo:
     url: ${ADMINISTRATIVO_URL:http://localhost:8081}
+    # Deve ser igual a seguranca.integracao.api-key do ms-administrativo (header X-Api-Key)
+    api-key: ${ADMINISTRATIVO_API_KEY:dev-integracao-key}
     connect-timeout: 2s
     read-timeout: 5s
