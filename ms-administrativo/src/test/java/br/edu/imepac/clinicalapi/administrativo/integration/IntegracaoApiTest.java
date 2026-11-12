@@ -110,7 +110,7 @@ class IntegracaoApiTest {
 
     @Test
     void medico_resumoSituacaoEAtende() throws Exception {
-        long m = medico("Dr. Ana", "12345678901", "1001", cardio);
+        long m = medico("Dr. Ana", "11145678920", "1001", cardio);
 
         mockMvc.perform(servico("/integracao/medicos/{id}", m))
                 .andExpect(status().isOk())
@@ -136,9 +136,9 @@ class IntegracaoApiTest {
 
     @Test
     void medicos_emLoteEPorEspecialidade() throws Exception {
-        long ana = medico("Dr. Ana", "12345678901", "1001", cardio);
-        long bia = medico("Dra. Bia", "10987654321", "1002", cardio, pediatria);
-        long caio = medico("Dr. Caio", "11122233344", "1003", pediatria);
+        long ana = medico("Dr. Ana", "11145678920", "1001", cardio);
+        long bia = medico("Dra. Bia", "22245678982", "1002", cardio, pediatria);
+        long caio = medico("Dr. Caio", "11122233396", "1003", pediatria);
         inativar("medicos", bia);
 
         // Por ids: qualquer status, ids inexistentes ignorados

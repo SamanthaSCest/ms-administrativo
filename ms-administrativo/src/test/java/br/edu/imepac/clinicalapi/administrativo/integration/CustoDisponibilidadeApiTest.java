@@ -62,7 +62,7 @@ class CustoDisponibilidadeApiTest {
         limpar();
         cardio = id(criar("/especialidades", "{\"nome\":\"Cardiologia\"}"));
         dermato = id(criar("/especialidades", "{\"nome\":\"Dermatologia\"}"));
-        medico = criarMedico("12345678901", "1001");
+        medico = criarMedico("11145678920", "1001");
         sala = id(criar("/salas", "{\"numero\":\"101\",\"tipo\":\"CONSULTORIO\"}"));
     }
 
@@ -191,7 +191,7 @@ class CustoDisponibilidadeApiTest {
                         .content(diaria(medico, "SEGUNDA", "12:00", "13:00", null)))
                 .andExpect(status().isCreated());
         // Outro médico na mesma sala e horário -> 409
-        long outro = criarMedico("10987654321", "1002");
+        long outro = criarMedico("22245678982", "1002");
         mockMvc.perform(post("/disponibilidades").contentType(MediaType.APPLICATION_JSON)
                         .content(diaria(outro, "SEGUNDA", "10:00", "11:00", sala)))
                 .andExpect(status().isConflict());

@@ -53,7 +53,7 @@ class MedicoServiceTest {
     private MedicoRequest request() {
         MedicoRequest r = new MedicoRequest();
         r.setNome("Maria Souza");
-        r.setCpf("12345678901");
+        r.setCpf("11145678920");
         r.setEmail("maria@clinica.com");
         r.setDataNascimento(LocalDate.of(1985, 4, 20));
         r.setCrm("CRM-123");
@@ -71,7 +71,7 @@ class MedicoServiceTest {
 
     @Test
     void criar_deveMapearERetornarComEspecialidade() {
-        when(repository.existsByCpf("12345678901")).thenReturn(false);
+        when(repository.existsByCpf("11145678920")).thenReturn(false);
         when(repository.existsByCrmAndUfCrm("CRM-123", UF.SP)).thenReturn(false);
         when(especialidadeRepository.findById(5L)).thenReturn(Optional.of(especialidade()));
         when(repository.save(any(Medico.class))).thenAnswer(inv -> {
@@ -91,7 +91,7 @@ class MedicoServiceTest {
 
     @Test
     void criar_cpfDuplicado_deveLancarConflict() {
-        when(repository.existsByCpf("12345678901")).thenReturn(true);
+        when(repository.existsByCpf("11145678920")).thenReturn(true);
 
         assertThatThrownBy(() -> service.criar(request())).isInstanceOf(ConflictException.class);
         verify(repository, never()).save(any());
@@ -99,7 +99,7 @@ class MedicoServiceTest {
 
     @Test
     void criar_crmDuplicado_deveLancarConflict() {
-        when(repository.existsByCpf("12345678901")).thenReturn(false);
+        when(repository.existsByCpf("11145678920")).thenReturn(false);
         when(repository.existsByCrmAndUfCrm("CRM-123", UF.SP)).thenReturn(true);
 
         assertThatThrownBy(() -> service.criar(request())).isInstanceOf(ConflictException.class);
