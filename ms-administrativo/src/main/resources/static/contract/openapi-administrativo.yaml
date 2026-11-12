@@ -246,7 +246,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FuncionarioRequest'
+              $ref: '#/components/schemas/FuncionarioCreateRequest'
       responses:
         '201':
           description: Criado. Header `Location` aponta para o recurso.
@@ -451,7 +451,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MedicoRequest'
+              $ref: '#/components/schemas/MedicoCreateRequest'
       responses:
         '201':
           description: Criado. Header `Location` aponta para o recurso.
@@ -1951,6 +1951,13 @@ components:
         page:
           $ref: '#/components/schemas/PageMetadata'
 
+    MedicoCreateRequest:
+      description: Dados para cadastrar médico; senha é obrigatória na criação.
+      allOf:
+        - $ref: '#/components/schemas/MedicoRequest'
+        - type: object
+          required: [senha]
+
     MedicoRequest:
       type: object
       required: [nome, cpf, dataNascimento, crm, ufCrm, especialidadeIds]
@@ -2354,6 +2361,13 @@ components:
           example: false
 
     # ---------- Funcionários ----------
+    FuncionarioCreateRequest:
+      description: Dados para cadastrar funcionário; senha é obrigatória na criação.
+      allOf:
+        - $ref: '#/components/schemas/FuncionarioRequest'
+        - type: object
+          required: [senha]
+
     FuncionarioRequest:
       type: object
       required: [nome, cpf, dataNascimento, matricula, cargo, dataAdmissao]

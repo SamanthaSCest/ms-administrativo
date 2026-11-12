@@ -148,7 +148,7 @@ class AuthApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"login\":\"admin\",\"senha\":\"errada\"}"))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("Login ou senha inválidos"));
+                .andExpect(jsonPath("$.detail").value("Login ou senha inválidos"));
     }
 
     @Test
@@ -225,7 +225,7 @@ class AuthApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(semSenha))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("senha"));
+                .andExpect(jsonPath("$.campos[0].campo").value("senha"));
     }
 
     @Test
