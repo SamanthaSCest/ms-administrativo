@@ -6,7 +6,7 @@ spring:
   application:
     name: ms-administrativo
   datasource:
-    url: ${DB_URL:jdbc:mysql://localhost:3307/clinical_administrativo?serverTimezone=UTC}
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/clinical_administrativo}
     username: ${DB_USER:clinical}
     password: ${DB_PASSWORD:clinical}
   jpa:

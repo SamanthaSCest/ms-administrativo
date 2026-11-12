@@ -12,7 +12,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
                        │ms-administ.│◀─│ms-agendament│  agendamento chama o administrativo (REST)
                        │   :8081    │  │    :8082    │  para validar médico e paciente
                        └─────┬──────┘  └──────┬──────┘
-                        MySQL próprio (:3307)    MySQL próprio (:3308)
+                     PostgreSQL próprio (:5433)  MySQL próprio (:3308)
                         clinical_administrativo  clinical_agendamento
 ```
 
@@ -34,7 +34,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **Spring Boot 3.5** | todos | Sobe a aplicação com configuração automática e servidor web embutido (Tomcat/Netty); empacota tudo num único `.jar` executável. |
 | **Spring Web (MVC)** | serviços | Cria os endpoints REST (`@RestController`, `@GetMapping`...). |
 | **Spring Data JPA + Hibernate** | serviços | Mapeia classes Java (entidades) para tabelas e gera o SQL; os repositories são só interfaces. |
-| **MySQL 8** | docker-compose | Banco relacional. **Um banco por microserviço**: cada serviço é dono dos seus dados e ninguém acessa o banco do outro (só pela API). |
+| **PostgreSQL 17** / **MySQL 8** | docker-compose | Banco relacional. **Um banco por microserviço**: cada serviço é dono dos seus dados e ninguém acessa o banco do outro (só pela API). O `ms-administrativo` usa PostgreSQL; o `ms-agendamento`, MySQL. |
 | **Flyway** | serviços | Versiona o schema do banco com scripts SQL (`db/migration/V1__...sql`) executados automaticamente na subida. O Hibernate só *valida* (`ddl-auto: validate`), nunca altera tabelas. |
 | **Bean Validation (Jakarta)** | serviços | Valida os DTOs com anotações (`@NotBlank`, `@Past`, `@Future`...) quando o controller usa `@Valid`. |
 | **ModelMapper** | serviços | Converte DTO <-> entidade automaticamente, evitando código repetitivo de getters/setters. |
@@ -49,7 +49,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **JUnit 5** | testes | Framework de testes (`@Test`, asserções). |
 | **Mockito** | testes | Cria dublês (mocks) de repositories/clients para testar os services isoladamente (testes unitários). |
 | **Spring Boot Test + MockMvc** | testes | Testes de integração: sobem o contexto Spring completo e chamam a API via HTTP simulado. |
-| **H2 (modo MySQL)** | testes | Banco em memória usado só nos testes, para rodarem sem Docker. |
+| **H2** | testes | Banco em memória usado só nos testes, para rodarem sem Docker (modo PostgreSQL no administrativo, modo MySQL no agendamento). |
 | **Docker (multi-stage)** | todos | Empacota cada microserviço numa imagem: o 1º estágio compila com Maven, o 2º só leva o JRE e o `.jar` (imagem menor). |
 | **Docker Compose** | raiz | Sobe todo o ambiente (2 bancos + 3 serviços) com um comando, na ordem certa (healthchecks + `depends_on`). |
 
@@ -81,8 +81,8 @@ Para criar uma API nova: **1)** escreva/atualize o YAML e combine com os outros 
 mvn clean verify
 ```
 
-Roda os testes unitários (JUnit + Mockito), de integração e do contrato OpenAPI. Os de integração usam o contexto Spring completo com H2 em modo MySQL
-(nos testes do agendamento, o `ms-administrativo` é simulado). Não precisa de MySQL/Docker para os testes.
+Roda os testes unitários (JUnit + Mockito), de integração e do contrato OpenAPI. Os de integração usam o contexto Spring completo com H2 imitando o banco de cada serviço
+(nos testes do agendamento, o `ms-administrativo` é simulado). Não precisa de banco nem de Docker para os testes.
 
 ## Gerar as imagens Docker
 
@@ -100,7 +100,7 @@ docker build -f api-gateway/Dockerfile       -t clinical/api-gateway:latest .
 ### Opção 1 — tudo de uma vez (docker compose)
 
 ```bash
-docker compose up -d --build     # sobe 2 MySQL (um por serviço) + 3 serviços (aguarda os healthchecks)
+docker compose up -d --build     # sobe 2 bancos (um por serviço) + 3 serviços (aguarda os healthchecks)
 docker compose ps
 docker compose logs -f ms-agendamento
 docker compose down              # para tudo (adicione -v para apagar o banco)
@@ -118,18 +118,18 @@ As imagens usam Eclipse Temurin 25 para compilação e execução (imagens JRE `
 docker network create clinical-net
 
 # um banco por microserviço
-docker run -d --name mysql-administrativo --network clinical-net -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=clinical_administrativo \
-  -e MYSQL_USER=clinical -e MYSQL_PASSWORD=clinical mysql:8.4
+docker run -d --name postgres-administrativo --network clinical-net -p 5433:5432 \
+  -e POSTGRES_DB=clinical_administrativo \
+  -e POSTGRES_USER=clinical -e POSTGRES_PASSWORD=clinical postgres:17
 
 docker run -d --name mysql-agendamento --network clinical-net -p 3308:3306 \
   -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=clinical_agendamento \
   -e MYSQL_USER=clinical -e MYSQL_PASSWORD=clinical mysql:8.4
 
-# aguarde os bancos ficarem prontos (~20s):  docker logs mysql-administrativo  (procure "ready for connections")
+# aguarde os bancos ficarem prontos (~20s):  docker logs postgres-administrativo  (procure "ready to accept connections")
 
 docker run -d --name ms-administrativo --network clinical-net -p 8081:8081 \
-  -e DB_URL="jdbc:mysql://mysql-administrativo:3306/clinical_administrativo?serverTimezone=UTC" \
+  -e DB_URL="jdbc:postgresql://postgres-administrativo:5432/clinical_administrativo" \
   -e DB_USER=clinical -e DB_PASSWORD=clinical \
   clinical/ms-administrativo:latest
 
@@ -145,16 +145,16 @@ docker run -d --name api-gateway --network clinical-net -p 8080:8080 \
   clinical/api-gateway:latest
 ```
 
-Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysql-agendamento mysql-administrativo && docker network rm clinical-net`
+Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysql-agendamento postgres-administrativo && docker network rm clinical-net`
 
-> Dentro da rede Docker os serviços se falam pelo **nome do container** (`ms-administrativo`, `mysql-administrativo`),
+> Dentro da rede Docker os serviços se falam pelo **nome do container** (`ms-administrativo`, `postgres-administrativo`),
 > nunca por `localhost`. Por isso as URLs são passadas por variável de ambiente.
 
 ### Variáveis de ambiente
 
 | Variável | Serviço | Padrão (execução local) |
 |---|---|---|
-| `DB_URL`, `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | administrativo: `localhost:3307/clinical_administrativo`; agendamento: `localhost:3308/clinical_agendamento`; usuário/senha `clinical` |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | administrativo: `localhost:5433/clinical_administrativo` (PostgreSQL); agendamento: `localhost:3308/clinical_agendamento`; usuário/senha `clinical` |
 | `ADMINISTRATIVO_URL` | agendamento, gateway | `http://localhost:8081` |
 | `AGENDAMENTO_URL` | gateway | `http://localhost:8082` |
 | `SERVER_PORT` | todos | 8081 / 8082 / 8080 |
@@ -164,7 +164,7 @@ Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysq
 Suba só o banco e rode os serviços pela IDE ou Maven:
 
 ```bash
-docker compose up -d mysql-administrativo mysql-agendamento
+docker compose up -d postgres-administrativo mysql-agendamento
 mvn -pl ms-administrativo spring-boot:run
 mvn -pl ms-agendamento spring-boot:run     # em outro terminal
 mvn -pl api-gateway spring-boot:run        # em outro terminal
