@@ -1,19 +1,19 @@
 services:
-  # um banco MySQL por microserviço (cada serviço é dono dos seus dados)
-  mysql-administrativo:
-    image: mysql:8.4
-    container_name: mysql-administrativo
+  # um banco por microserviço (cada serviço é dono dos seus dados)
+  # Porta 5433 no host para não conflitar com um PostgreSQL instalado localmente (5432)
+  postgres-administrativo:
+    image: postgres:17
+    container_name: postgres-administrativo
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: clinical_administrativo
-      MYSQL_USER: clinical
-      MYSQL_PASSWORD: clinical
+      POSTGRES_DB: clinical_administrativo
+      POSTGRES_USER: clinical
+      POSTGRES_PASSWORD: clinical
     ports:
-      - "3307:3306"
+      - "5433:5432"
     volumes:
-      - mysql-administrativo-data:/var/lib/mysql
+      - postgres-administrativo-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD", "pg_isready", "-U", "clinical", "-d", "clinical_administrativo"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -60,7 +60,7 @@ services:
     container_name: ms-administrativo
     environment:
       SERVER_PORT: 8081
-      DB_URL: jdbc:mysql://mysql-administrativo:3306/clinical_administrativo?serverTimezone=UTC
+      DB_URL: jdbc:postgresql://postgres-administrativo:5432/clinical_administrativo
       DB_USER: clinical
       DB_PASSWORD: clinical
       RABBITMQ_HOST: rabbitmq
@@ -74,7 +74,7 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      mysql-administrativo:
+      postgres-administrativo:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -129,5 +129,5 @@ services:
         condition: service_healthy
 
 volumes:
-  mysql-administrativo-data:
+  postgres-administrativo-data:
   mysql-agendamento-data:
