@@ -70,8 +70,8 @@ Nos testes o publicador fica desligado (`outbox.publicador.habilitado: false`).
 
 ```text
 Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, dataNascimento)
-  id, login (único)             ├── Medico      (medicos)       + crm, especialidade, usuario  -> perfil MEDICO
-  senha (hash BCrypt)           ├── Funcionario (funcionarios)  + matricula, cargo, setor,     -> perfil ADMIN ou FUNCIONARIO
+  id, login (único)             ├── Medico      (medicos)       + crm/ufCrm, especialidades,   -> perfil MEDICO
+  senha (hash BCrypt)           ├── Funcionario (funcionarios)  + matricula, cargo, setor,     -> perfil pelo cargo
   perfil, ativo                 │                                 dataAdmissao, usuario
         ^                       └── Paciente    (pacientes)     sem usuário: não acessa o sistema
         └──── 1:1 (usuario_id, único) em medicos e funcionarios
@@ -81,7 +81,7 @@ Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, data
 - **Paciente não tem login**: é apenas um registro, e o cadastro não pede senha.
 - Remover o médico ou o funcionário remove o usuário. Mudar o CPF muda o login.
 - Um mesmo CPF só pode ter um usuário: cadastrar um médico com o CPF de um funcionário retorna 409. Um funcionário pode ter o mesmo CPF de um paciente.
-- O **administrador inicial** (sem pessoa vinculada) é criado na inicialização por `config/AdminInicializador`, a partir de `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local `admin`/`admin12345`). Outros admins são funcionários com `"perfil": "ADMIN"`.
+- O **administrador inicial** (sem pessoa vinculada) é criado na inicialização por `config/AdminInicializador`, a partir de `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local `admin`/`admin12345`). Outros admins são funcionários com `"cargo": "ADMINISTRADOR"` (o cargo define o perfil: ADMINISTRADOR → `ADMIN`; demais → `FUNCIONARIO`).
 - Migration: `db/migration/V3__criar_usuarios_e_funcionarios.sql` (médicos antigos ficam com `usuario_id` nulo até receberem senha num PUT).
 
 ### Endpoints
@@ -101,7 +101,7 @@ A matriz completa de permissões está na descrição do contrato (`static/contr
 
 - JWT **HS256** emitido pelo próprio serviço (`services/TokenService`) e validado pelo Spring Security Resource Server (`config/SecurityConfig`). O claim `perfil` vira `ROLE_<perfil>`.
 - Erros de segurança (401/403) saem no mesmo formato `ErrorResponse` (`config/SegurancaErrorHandler`).
-- Serviço-a-serviço: o ms-agendamento envia `X-Api-Key` (`config/ApiKeyAuthenticationFilter`) e recebe o perfil `SERVICO` (somente leitura).
+- Serviço-a-serviço: o ms-agendamento e o ms-estoque enviam `X-Api-Key` (`config/ApiKeyAuthenticationFilter`) e recebem o perfil `SERVICO` (leitura; escrita só em `/insumos`, para o estoque).
 - Swagger UI: http://localhost:8081/swagger-ui.html → `POST /auth/login` → botão **Authorize** → cole o `accessToken`.
 
 | Variável | Padrão (só desenvolvimento) | Uso |
@@ -112,3 +112,22 @@ A matriz completa de permissões está na descrição do contrato (`static/contr
 | `INTEGRACAO_API_KEY` | `dev-integracao-key` | Chave `X-Api-Key` (no ms-agendamento: `ADMINISTRATIVO_API_KEY`) |
 
 Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUser`; o fluxo real (login, token, perfis, API key) está em `AuthApiIntegrationTest`.
+
+## Entidades do diagrama de classes
+
+| Entidade | Tabela(s) | Endpoints | Regras principais |
+|---|---|---|---|
+| `Paciente` (+ `Endereco` embutido) | `pacientes` | `/pacientes` | `sexo`, `telefone` (celular), `telefoneFixo`, `endereco`; `calcularIdade()`/`ehMenorDeIdade()`; **menor de idade exige responsável** (422) |
+| `ResponsavelLegal` | `responsaveis_legais` | `/responsaveis` | CPF único e válido; não remove com pacientes vinculados |
+| `Medico` | `medicos`, `medico_especialidades` | `/medicos` | `ufCrm`; **várias especialidades** (`especialidadeIds`); CRM único por UF |
+| `Funcionario` | `funcionarios` | `/funcionarios` | `cargo` (enum `Cargo`) define o perfil de acesso |
+| `Convenio` | `convenios` | `/convenios` | registro ANS e CNPJ únicos (CNPJ validado) |
+| `Sala` | `salas` | `/salas` | identificação única; não remove com disponibilidades |
+| `Insumo` | `insumos` | `/insumos`, `PATCH /insumos/{id}/custo` | código único; **ms-estoque pode escrever** (X-Api-Key) |
+| `Procedimento` + `InsumoProcedimento` | `procedimentos`, `insumos_procedimento` | `/procedimentos` | código TUSS único; insumos sem repetição; resposta traz `custoInsumos` |
+| `CustoMedico` → `CustoMedicoConsulta` / `CustoMedicoProcedimento` | `custos_medicos` (SINGLE_TABLE) | `/custos-medicos`, `/custos-medicos/vigente` | médico precisa atender a especialidade; vigências não se sobrepõem (409) |
+| `DisponibilidadeMedica` → `DisponibilidadeDiaria` / `DisponibilidadeExcecao` | `disponibilidades_medicas` (SINGLE_TABLE) | `/disponibilidades`, `/disponibilidades/agenda` | cadastrada pelo ADMIN; sem sobreposição do médico nem da sala (409); a agenda do dia aplica bloqueios e horários extras |
+
+Enums: `Sexo`, `Cargo`, `TipoSala`, `DiaSemana`, `UF`. Custos e disponibilidades são **composição** do médico: removidos junto com ele (`ON DELETE CASCADE`). Migrations V4 a V9.
+
+**Ainda não implementado (decisão do time):** a `EntidadeBase` do diagrama com `UUID id`, `ativo` (`inativar()`/`reativar()`) e auditoria (`criadoPor`/`atualizadoPor`). Trocar `Long` por `UUID` afeta todas as tabelas e o ms-agendamento, que guarda `medicoId`/`pacienteId` como número; por isso ficou para uma etapa própria, coordenada entre os serviços.

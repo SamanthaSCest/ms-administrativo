@@ -108,4 +108,34 @@ public class Endereco {
     public void setUf(UF uf) {
         this.uf = uf;
     }
+
+    /** Ex.: "Rua A, 10 - Apto 2 - Centro - Araguari/MG - CEP 38440-000" (partes vazias são omitidas). */
+    public String formatado() {
+        StringBuilder sb = new StringBuilder();
+        if (logradouro != null) {
+            sb.append(logradouro);
+            if (numero != null) {
+                sb.append(", ").append(numero);
+            }
+        }
+        anexar(sb, complemento);
+        anexar(sb, bairro);
+        if (cidade != null) {
+            anexar(sb, uf == null ? cidade : cidade + "/" + uf.name());
+        }
+        if (cep != null && cep.length() == 8) {
+            anexar(sb, "CEP " + cep.substring(0, 5) + "-" + cep.substring(5));
+        }
+        return sb.toString();
+    }
+
+    private static void anexar(StringBuilder sb, String parte) {
+        if (parte == null || parte.isBlank()) {
+            return;
+        }
+        if (!sb.isEmpty()) {
+            sb.append(" - ");
+        }
+        sb.append(parte);
+    }
 }

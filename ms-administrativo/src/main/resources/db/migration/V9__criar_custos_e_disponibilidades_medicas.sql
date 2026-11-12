@@ -1,0 +1,38 @@
+-- Custos e disponibilidades do médico (herança SINGLE_TABLE: coluna "tipo" diferencia as subclasses).
+-- ON DELETE CASCADE no médico: são composição (removidos junto com o médico).
+CREATE TABLE custos_medicos (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tipo             VARCHAR(20)    NOT NULL,  -- CONSULTA ou PROCEDIMENTO
+    medico_id        BIGINT         NOT NULL,
+    valor            DECIMAL(12, 2) NOT NULL,
+    vigencia_inicio  DATE           NOT NULL,
+    vigencia_fim     DATE,
+    especialidade_id BIGINT,                   -- só CONSULTA
+    procedimento_id  BIGINT,                   -- só PROCEDIMENTO
+    data_criacao     DATETIME(6)    NOT NULL,
+    data_modificacao DATETIME(6)    NOT NULL,
+    CONSTRAINT fk_custos_medicos_medico FOREIGN KEY (medico_id) REFERENCES medicos (id) ON DELETE CASCADE,
+    CONSTRAINT fk_custos_medicos_especialidade FOREIGN KEY (especialidade_id) REFERENCES especialidades (id),
+    CONSTRAINT fk_custos_medicos_procedimento FOREIGN KEY (procedimento_id) REFERENCES procedimentos (id)
+);
+
+CREATE TABLE disponibilidades_medicas (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    tipo             VARCHAR(20)  NOT NULL,    -- DIARIA ou EXCECAO
+    medico_id        BIGINT       NOT NULL,
+    sala_id          BIGINT,
+    hora_inicial     TIME         NOT NULL,
+    hora_final       TIME         NOT NULL,
+    observacoes      VARCHAR(255),
+    dia_semana       VARCHAR(10),              -- só DIARIA
+    data_excecao     DATE,                     -- só EXCECAO
+    disponivel       BOOLEAN,                  -- só EXCECAO
+    motivo           VARCHAR(255),             -- só EXCECAO
+    data_criacao     DATETIME(6)  NOT NULL,
+    data_modificacao DATETIME(6)  NOT NULL,
+    CONSTRAINT fk_disponibilidades_medico FOREIGN KEY (medico_id) REFERENCES medicos (id) ON DELETE CASCADE,
+    CONSTRAINT fk_disponibilidades_sala FOREIGN KEY (sala_id) REFERENCES salas (id)
+);
+
+CREATE INDEX ix_custos_medicos_medico ON custos_medicos (medico_id);
+CREATE INDEX ix_disponibilidades_medico ON disponibilidades_medicas (medico_id);

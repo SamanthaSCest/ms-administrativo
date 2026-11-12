@@ -6,7 +6,6 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
 import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.mapper.FuncionarioMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
-import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Cadastro de funcionários (somente ADMIN): unicidade de CPF/matrícula e criação do usuário de acesso
- * com perfil ADMIN ou FUNCIONARIO.
+ * com o perfil definido pelo cargo (ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO).
  */
 @Service
 @RequiredArgsConstructor
@@ -79,13 +78,9 @@ public class FuncionarioService {
         repository.delete(buscarEntidade(id));
     }
 
-    /** Funcionário só pode ter perfil ADMIN ou FUNCIONARIO (padrão). */
+    /** O nível de acesso vem do cargo: ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO. */
     private Perfil perfil(FuncionarioRequest request) {
-        Perfil perfil = request.getPerfil() == null ? Perfil.FUNCIONARIO : request.getPerfil();
-        if (perfil != Perfil.ADMIN && perfil != Perfil.FUNCIONARIO) {
-            throw new BusinessRuleException("Perfil de funcionário deve ser ADMIN ou FUNCIONARIO");
-        }
-        return perfil;
+        return request.getCargo().perfil();
     }
 
     private Funcionario buscarEntidade(Long id) {

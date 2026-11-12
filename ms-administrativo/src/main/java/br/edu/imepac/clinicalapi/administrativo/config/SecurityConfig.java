@@ -63,11 +63,24 @@ public class SecurityConfig {
                         // Leituras para outros microserviços
                         .requestMatchers("/integracao/**").hasAnyRole("SERVICO", "ADMIN")
                         // Pacientes: equipe gerencia; médico e serviços consultam
-                        .requestMatchers(HttpMethod.GET, "/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
-                        .requestMatchers("/pacientes/**").hasAnyRole("ADMIN", "FUNCIONARIO")
-                        // Médicos e especialidades: todos consultam, só o administrador altera
-                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**").authenticated()
-                        .requestMatchers("/medicos/**", "/especialidades/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
+                        .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
+                        .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
+                        // Custos dos médicos: equipe e serviços (ex.: faturamento) consultam; só o admin altera
+                        .requestMatchers(HttpMethod.GET, "/custos-medicos/**").hasAnyRole("ADMIN", "FUNCIONARIO", "SERVICO")
+                        .requestMatchers("/custos-medicos/**").hasRole("ADMIN")
+                        // Disponibilidades: todos consultam (inclusive o ms-agendamento); o admin cadastra
+                        .requestMatchers(HttpMethod.GET, "/disponibilidades/**").authenticated()
+                        .requestMatchers("/disponibilidades/**").hasRole("ADMIN")
+                        // Insumos: o ms-estoque (X-Api-Key) também cadastra e altera
+                        .requestMatchers(HttpMethod.GET, "/insumos/**").authenticated()
+                        .requestMatchers("/insumos/**").hasAnyRole("ADMIN", "SERVICO")
+                        // Cadastros de apoio: todos consultam, só o administrador altera
+                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
+                                "/procedimentos/**")
+                        .authenticated()
+                        .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
+                                "/procedimentos/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))

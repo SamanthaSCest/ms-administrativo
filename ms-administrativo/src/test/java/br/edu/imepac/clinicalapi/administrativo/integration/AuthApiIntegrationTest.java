@@ -109,16 +109,17 @@ class AuthApiIntegrationTest {
     private String medicoJson(long especialidadeId, String cpf) {
         return """
                 {"nome":"Maria Souza","cpf":"%s","dataNascimento":"1985-04-20",
-                 "crm":"CRM-1","especialidadeId":%d,"senha":"medicoSenha1"}
+                 "crm":"CRM-1","ufCrm":"SP","especialidadeIds":[%d],"senha":"medicoSenha1"}
                 """.formatted(cpf, especialidadeId);
     }
 
-    private String funcionarioJson(String cpf, String matricula, String perfil) {
+    /** cargo null = RECEPCIONISTA. */
+    private String funcionarioJson(String cpf, String matricula, String cargo) {
         return """
                 {"nome":"Ana Lima","cpf":"%s","email":"ana@clinica.com","telefone":"34999990000",
-                 "dataNascimento":"1992-03-10","matricula":"%s","cargo":"Recepcionista","setor":"Recepção",
-                 "dataAdmissao":"2024-02-01","perfil":%s,"senha":"funcSenha123"}
-                """.formatted(cpf, matricula, perfil == null ? "null" : "\"" + perfil + "\"");
+                 "dataNascimento":"1992-03-10","matricula":"%s","cargo":"%s","setor":"Recepção",
+                 "dataAdmissao":"2024-02-01","senha":"funcSenha123"}
+                """.formatted(cpf, matricula, cargo == null ? "RECEPCIONISTA" : cargo);
     }
 
     @Test
@@ -189,7 +190,7 @@ class AuthApiIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.matricula").value("F-001"))
-                .andExpect(jsonPath("$.cargo").value("Recepcionista"))
+                .andExpect(jsonPath("$.cargo").value("RECEPCIONISTA"))
                 .andExpect(jsonPath("$.dataAdmissao").value("2024-02-01"))
                 .andExpect(jsonPath("$.usuario.login").value("11122233344"))
                 .andExpect(jsonPath("$.usuario.perfil").value("FUNCIONARIO"))
@@ -228,23 +229,23 @@ class AuthApiIntegrationTest {
     }
 
     @Test
-    void funcionario_perfilMedico_retorna422() throws Exception {
+    void funcionario_cargoInexistente_retorna400() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
 
         mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(funcionarioJson("11122233344", "F-001", "MEDICO")))
-                .andExpect(status().isUnprocessableEntity());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
-    void funcionario_comPerfilAdmin_acessaGestaoDeUsuarios() throws Exception {
+    void funcionario_cargoAdministrador_acessaGestaoDeUsuarios() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
         mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(funcionarioJson("55566677788", "F-002", "ADMIN")))
+                        .content(funcionarioJson("55566677788", "F-002", "ADMINISTRADOR")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.usuario.perfil").value("ADMIN"));
 

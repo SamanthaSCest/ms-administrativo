@@ -21,16 +21,25 @@ info:
     3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
        perfil sem permissão: **403** (ambos no formato `ErrorResponse`).
 
-    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`), com acesso só de leitura.
+    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`): leitura em geral e, para o
+    ms-estoque, também escrita em `/insumos`.
+
+    O nível de acesso do funcionário vem do **cargo**: `ADMINISTRADOR` → `ADMIN`; os demais → `FUNCIONARIO`.
 
     | Recurso | ADMIN | FUNCIONARIO | MEDICO | Serviço (X-Api-Key) |
     |---|---|---|---|---|
     | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | — |
     | `/usuarios`, `/funcionarios` | ✔ | — | — | — |
-    | Especialidades e médicos (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Especialidades e médicos (escrita) | ✔ | — | — | — |
-    | Pacientes (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Pacientes (escrita) | ✔ | ✔ | — | — |
+    | Especialidades, médicos, convênios, salas, procedimentos (leitura) | ✔ | ✔ | ✔ | ✔ |
+    | Especialidades, médicos, convênios, salas, procedimentos (escrita) | ✔ | — | — | — |
+    | Pacientes e responsáveis legais (leitura) | ✔ | ✔ | ✔ | ✔ |
+    | Pacientes e responsáveis legais (escrita) | ✔ | ✔ | — | — |
+    | Insumos (leitura) | ✔ | ✔ | ✔ | ✔ |
+    | Insumos (escrita) | ✔ | — | — | ✔ (ms-estoque) |
+    | Custos dos médicos (leitura) | ✔ | ✔ | — | ✔ |
+    | Custos dos médicos (escrita) | ✔ | — | — | — |
+    | Disponibilidades (leitura, inclusive `/agenda`) | ✔ | ✔ | ✔ | ✔ |
+    | Disponibilidades (escrita) | ✔ | — | — | — |
     | `/integracao/**` | ✔ | — | — | ✔ |
 servers:
   - url: http://localhost:8081
@@ -47,6 +56,18 @@ tags:
   - name: Especialidades
   - name: Médicos
   - name: Pacientes
+  - name: Responsáveis legais
+    description: Responsáveis por pacientes menores de idade
+  - name: Convênios
+  - name: Salas
+  - name: Insumos
+    description: Mantidos também pelo ms-estoque (X-Api-Key)
+  - name: Procedimentos
+    description: Procedimentos (código TUSS) e os insumos que consomem
+  - name: Custos dos médicos
+    description: Valor de consulta (por especialidade) ou de procedimento, com vigência
+  - name: Disponibilidades
+    description: Horários de atendimento dos médicos, cadastrados pelo ADMIN
   - name: Integração
     description: Leituras para outros microserviços (somente leitura, CPF mascarado)
 
@@ -215,7 +236,8 @@ paths:
       summary: Cadastra um funcionário e o seu usuário de acesso
       description: |
         Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
-        com perfil `FUNCIONARIO` (padrão) ou `ADMIN`. `senha` é obrigatória.
+        com o nível de acesso definido pelo cargo (`ADMINISTRADOR` → `ADMIN`; demais → `FUNCIONARIO`).
+        `senha` é obrigatória.
       operationId: criarFuncionario
       requestBody:
         required: true
@@ -651,6 +673,798 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /responsaveis:
+    get:
+      tags: [Responsáveis legais]
+      summary: Lista responsáveis legais (paginado)
+      operationId: listarResponsaveis
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de responsáveis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsavelLegalPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Responsáveis legais]
+      summary: Cadastra um responsável legal
+      operationId: criarResponsavel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponsavelLegalRequest'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsavelLegalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /responsaveis/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Responsáveis legais]
+      summary: Busca responsável legal por id
+      operationId: buscarResponsavel
+      responses:
+        '200':
+          description: Encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsavelLegalResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Responsáveis legais]
+      summary: Atualiza um responsável legal
+      operationId: atualizarResponsavel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponsavelLegalRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponsavelLegalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Responsáveis legais]
+      summary: Remove um responsável legal
+      description: Retorna 409 se houver pacientes vinculados.
+      operationId: removerResponsavel
+      responses:
+        '204':
+          description: Removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /convenios:
+    get:
+      tags: [Convênios]
+      summary: Lista convênios (paginado)
+      operationId: listarConvenios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de convênios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvenioPage'
+    post:
+      tags: [Convênios]
+      summary: Cadastra um convênio
+      operationId: criarConvenio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvenioRequest'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /convenios/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Convênios]
+      summary: Busca convênio por id
+      operationId: buscarConvenio
+      responses:
+        '200':
+          description: Encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvenioResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Convênios]
+      summary: Atualiza um convênio
+      operationId: atualizarConvenio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvenioRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Convênios]
+      summary: Remove um convênio
+      operationId: removerConvenio
+      responses:
+        '204':
+          description: Removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /salas:
+    get:
+      tags: [Salas]
+      summary: Lista salas (paginado)
+      operationId: listarSalas
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de salas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaPage'
+    post:
+      tags: [Salas]
+      summary: Cadastra uma sala
+      operationId: criarSala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaRequest'
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /salas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Salas]
+      summary: Busca sala por id
+      operationId: buscarSala
+      responses:
+        '200':
+          description: Encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Salas]
+      summary: Atualiza uma sala
+      operationId: atualizarSala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaRequest'
+      responses:
+        '200':
+          description: Atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Salas]
+      summary: Remove uma sala
+      description: Retorna 409 se houver disponibilidades médicas na sala.
+      operationId: removerSala
+      responses:
+        '204':
+          description: Removida
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /insumos:
+    get:
+      tags: [Insumos]
+      summary: Lista insumos (paginado)
+      operationId: listarInsumos
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de insumos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumoPage'
+    post:
+      tags: [Insumos]
+      summary: Cadastra um insumo (ADMIN ou ms-estoque)
+      operationId: criarInsumo
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsumoRequest'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /insumos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Insumos]
+      summary: Busca insumo por id
+      operationId: buscarInsumo
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumoResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Insumos]
+      summary: Atualiza um insumo (ADMIN ou ms-estoque)
+      operationId: atualizarInsumo
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsumoRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Insumos]
+      summary: Remove um insumo (ADMIN ou ms-estoque)
+      description: Retorna 409 se o insumo for usado em algum procedimento.
+      operationId: removerInsumo
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '204':
+          description: Removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /insumos/{id}/custo:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Insumos]
+      summary: 'Atualiza só o custo unitário (ex.: ms-estoque após uma compra)'
+      operationId: atualizarCustoInsumo
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsumoCustoRequest'
+      responses:
+        '200':
+          description: Custo atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsumoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /procedimentos:
+    get:
+      tags: [Procedimentos]
+      summary: Lista procedimentos (paginado)
+      operationId: listarProcedimentos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de procedimentos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedimentoPage'
+    post:
+      tags: [Procedimentos]
+      summary: Cadastra um procedimento com seus insumos
+      operationId: criarProcedimento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedimentoRequest'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedimentoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /procedimentos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Procedimentos]
+      summary: Busca procedimento por id
+      operationId: buscarProcedimento
+      responses:
+        '200':
+          description: Encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedimentoResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Procedimentos]
+      summary: Atualiza um procedimento
+      description: A lista `insumos` substitui a atual (insumos fora da lista são removidos do procedimento).
+      operationId: atualizarProcedimento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedimentoRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedimentoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Procedimentos]
+      summary: Remove um procedimento (e seus insumos)
+      description: Retorna 409 se houver custos de médicos para o procedimento.
+      operationId: removerProcedimento
+      responses:
+        '204':
+          description: Removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /custos-medicos:
+    get:
+      tags: [Custos dos médicos]
+      summary: Lista custos (paginado), opcionalmente de um médico
+      operationId: listarCustosMedicos
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: medicoId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de custos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustoMedicoPage'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Custos dos médicos]
+      summary: Cadastra um custo (CONSULTA ou PROCEDIMENTO)
+      description: |
+        CONSULTA exige `especialidadeId` (que o médico atenda); PROCEDIMENTO exige `procedimentoId`
+        (de uma especialidade que o médico atenda). Vigências sobrepostas para o mesmo médico e item retornam 409.
+      operationId: criarCustoMedico
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustoMedicoRequest'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustoMedicoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /custos-medicos/vigente:
+    get:
+      tags: [Custos dos médicos]
+      summary: Custo vigente do médico numa data
+      description: Informe `especialidadeId` (consulta) **ou** `procedimentoId`.
+      operationId: buscarCustoVigente
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: medicoId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: especialidadeId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: procedimentoId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: data
+          in: query
+          description: 'Padrão: hoje'
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Custo vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustoMedicoResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /custos-medicos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Custos dos médicos]
+      summary: Busca custo por id
+      operationId: buscarCustoMedico
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustoMedicoResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Custos dos médicos]
+      summary: Atualiza um custo (o tipo não pode mudar)
+      operationId: atualizarCustoMedico
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustoMedicoRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustoMedicoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Custos dos médicos]
+      summary: Remove um custo
+      operationId: removerCustoMedico
+      responses:
+        '204':
+          description: Removido
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /disponibilidades:
+    get:
+      tags: [Disponibilidades]
+      summary: Lista disponibilidades (paginado), opcionalmente de um médico
+      operationId: listarDisponibilidades
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: medicoId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de disponibilidades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadePage'
+    post:
+      tags: [Disponibilidades]
+      summary: Cadastra uma disponibilidade (DIARIA ou EXCECAO)
+      description: |
+        DIARIA repete toda semana no `diaSemana`. EXCECAO vale só na `data`: `disponivel=false` bloqueia o horário
+        (folga), `disponivel=true` acrescenta um horário extra. Horários sobrepostos do mesmo médico no mesmo dia,
+        ou da mesma sala em horários semanais, retornam 409.
+      operationId: criarDisponibilidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisponibilidadeRequest'
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /disponibilidades/agenda:
+    get:
+      tags: [Disponibilidades]
+      summary: Horários em que o médico atende numa data
+      description: Semanais do dia, menos os que cruzam um bloqueio (EXCECAO com disponivel=false), mais os horários extras.
+      operationId: agendaDoMedico
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: medicoId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: data
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Horários do dia, em ordem
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DisponibilidadeResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /disponibilidades/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Disponibilidades]
+      summary: Busca disponibilidade por id
+      operationId: buscarDisponibilidade
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      responses:
+        '200':
+          description: Encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadeResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Disponibilidades]
+      summary: Atualiza uma disponibilidade (o tipo não pode mudar)
+      operationId: atualizarDisponibilidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisponibilidadeRequest'
+      responses:
+        '200':
+          description: Atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Disponibilidades]
+      summary: Remove uma disponibilidade
+      operationId: removerDisponibilidade
+      responses:
+        '204':
+          description: Removida
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -820,7 +1634,7 @@ components:
 
     MedicoRequest:
       type: object
-      required: [nome, cpf, dataNascimento, crm, especialidadeId]
+      required: [nome, cpf, dataNascimento, crm, ufCrm, especialidadeIds]
       properties:
         nome:
           type: string
@@ -846,10 +1660,18 @@ components:
         crm:
           type: string
           maxLength: 20
-          example: CRM-SP-123456
-        especialidadeId:
-          type: integer
-          format: int64
+          description: Único por UF (ufCrm)
+          example: '123456'
+        ufCrm:
+          $ref: '#/components/schemas/UF'
+        especialidadeIds:
+          type: array
+          minItems: 1
+          description: Especialidades que o médico atende (pelo menos uma)
+          items:
+            type: integer
+            format: int64
+          example: [1, 2]
         senha:
           $ref: '#/components/schemas/SenhaPessoa'
     MedicoResponse:
@@ -871,8 +1693,12 @@ components:
           format: date
         crm:
           type: string
-        especialidade:
-          $ref: '#/components/schemas/EspecialidadeResponse'
+        ufCrm:
+          $ref: '#/components/schemas/UF'
+        especialidades:
+          type: array
+          items:
+            $ref: '#/components/schemas/EspecialidadeResponse'
         usuario:
           $ref: '#/components/schemas/UsuarioResponse'
         dataCriacao:
@@ -910,11 +1736,23 @@ components:
         telefone:
           type: string
           maxLength: 20
+          description: Celular
         dataNascimento:
           type: string
           format: date
           description: Deve estar no passado
           example: '1990-01-15'
+        sexo:
+          $ref: '#/components/schemas/Sexo'
+        telefoneFixo:
+          type: string
+          maxLength: 20
+        endereco:
+          $ref: '#/components/schemas/Endereco'
+        responsavelId:
+          type: integer
+          format: int64
+          description: Responsável legal. **Obrigatório para menores de 18 anos** (senão 422).
     PacienteResponse:
       type: object
       properties:
@@ -929,9 +1767,23 @@ components:
           type: string
         telefone:
           type: string
+          description: Celular
         dataNascimento:
           type: string
           format: date
+        sexo:
+          $ref: '#/components/schemas/Sexo'
+        telefoneFixo:
+          type: string
+        endereco:
+          $ref: '#/components/schemas/Endereco'
+        responsavel:
+          $ref: '#/components/schemas/ResponsavelLegalResponse'
+        idade:
+          type: integer
+          description: Calculada a partir da data de nascimento
+        menorDeIdade:
+          type: boolean
         dataCriacao:
           type: string
           format: date-time
@@ -1104,9 +1956,7 @@ components:
           description: Única por funcionário
           example: F-001
         cargo:
-          type: string
-          maxLength: 100
-          example: Recepcionista
+          $ref: '#/components/schemas/Cargo'
         setor:
           type: string
           maxLength: 100
@@ -1116,11 +1966,6 @@ components:
           format: date
           description: Não pode estar no futuro
           example: '2024-02-01'
-        perfil:
-          type: string
-          enum: [ADMIN, FUNCIONARIO]
-          default: FUNCIONARIO
-          description: Perfil de acesso do funcionário. Outros valores resultam em 422.
         senha:
           $ref: '#/components/schemas/SenhaPessoa'
     FuncionarioResponse:
@@ -1143,7 +1988,7 @@ components:
         matricula:
           type: string
         cargo:
-          type: string
+          $ref: '#/components/schemas/Cargo'
         setor:
           type: string
         dataAdmissao:
@@ -1164,5 +2009,537 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FuncionarioResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Enums e tipos comuns ----------
+    UF:
+      type: string
+      enum: [AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, PI, RJ, RN, RS, RO, RR, SC, SP, SE, TO]
+      example: MG
+    Sexo:
+      type: string
+      enum: [MASCULINO, FEMININO, OUTRO]
+    Cargo:
+      type: string
+      enum: [RECEPCIONISTA, ESTOQUISTA, RESPONSAVEL_FINANCEIRO, ADMINISTRADOR]
+      description: Define o nível de acesso (ADMINISTRADOR → ADMIN; demais → FUNCIONARIO)
+    TipoSala:
+      type: string
+      enum: [CONSULTORIO, EXAME, PROCEDIMENTO, CIRURGIA]
+    DiaSemana:
+      type: string
+      enum: [DOMINGO, SEGUNDA, TERCA, QUARTA, QUINTA, SEXTA, SABADO]
+    Referencia:
+      type: object
+      description: Resumo de um registro relacionado
+      properties:
+        id:
+          type: integer
+          format: int64
+        descricao:
+          type: string
+    Endereco:
+      type: object
+      description: Opcional; se enviado, precisa estar completo. `formatado` só vem na resposta.
+      required: [cep, logradouro, numero, bairro, cidade, uf]
+      properties:
+        cep:
+          type: string
+          pattern: '^\d{8}$'
+          example: '38440000'
+        logradouro:
+          type: string
+          maxLength: 150
+          example: Rua A
+        numero:
+          type: string
+          maxLength: 10
+          example: '10'
+        complemento:
+          type: string
+          maxLength: 60
+        bairro:
+          type: string
+          maxLength: 80
+          example: Centro
+        cidade:
+          type: string
+          maxLength: 80
+          example: Araguari
+        uf:
+          $ref: '#/components/schemas/UF'
+        formatado:
+          type: string
+          readOnly: true
+          example: Rua A, 10 - Centro - Araguari/MG - CEP 38440-000
+
+    # ---------- Responsável legal ----------
+    ResponsavelLegalRequest:
+      type: object
+      required: [nome, cpf, parentesco]
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+        cpf:
+          type: string
+          description: CPF com dígitos verificadores válidos
+          example: '52998224725'
+        telefone:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        parentesco:
+          type: string
+          maxLength: 50
+          example: MÃE
+    ResponsavelLegalResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        cpf:
+          type: string
+        telefone:
+          type: string
+        email:
+          type: string
+        parentesco:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    ResponsavelLegalPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResponsavelLegalResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Convênio ----------
+    ConvenioRequest:
+      type: object
+      required: [nome, registroAns, cnpj]
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          example: Unimed
+        registroAns:
+          type: string
+          maxLength: 20
+          description: Único
+          example: '123456'
+        cnpj:
+          type: string
+          pattern: '^\d{14}$'
+          description: Único, com dígitos verificadores válidos
+          example: '11222333000181'
+        telefone:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+    ConvenioResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        registroAns:
+          type: string
+        cnpj:
+          type: string
+        telefone:
+          type: string
+        email:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    ConvenioPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConvenioResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Sala ----------
+    SalaRequest:
+      type: object
+      required: [identificacao, tipo]
+      properties:
+        identificacao:
+          type: string
+          maxLength: 50
+          description: Única
+          example: Consultório 1
+        tipo:
+          $ref: '#/components/schemas/TipoSala'
+        andar:
+          type: string
+          maxLength: 20
+          example: 1º
+    SalaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        identificacao:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoSala'
+        andar:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    SalaPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/SalaResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Insumo ----------
+    InsumoRequest:
+      type: object
+      required: [codigo, nome, unidadeMedida, custoUnitario]
+      properties:
+        codigo:
+          type: string
+          maxLength: 30
+          description: Único
+          example: LUVA-M
+        nome:
+          type: string
+          maxLength: 150
+          example: Luva de procedimento M
+        descricao:
+          type: string
+          maxLength: 255
+        unidadeMedida:
+          type: string
+          maxLength: 20
+          example: UN
+        custoUnitario:
+          type: number
+          minimum: 0
+          example: 0.85
+    InsumoCustoRequest:
+      type: object
+      required: [custoUnitario]
+      properties:
+        custoUnitario:
+          type: number
+          minimum: 0
+          example: 0.95
+    InsumoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        codigo:
+          type: string
+        nome:
+          type: string
+        descricao:
+          type: string
+        unidadeMedida:
+          type: string
+        custoUnitario:
+          type: number
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    InsumoPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsumoResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Procedimento ----------
+    ProcedimentoRequest:
+      type: object
+      required: [especialidadeId, codigoTuss, nome, duracaoMinutos, valorBase]
+      properties:
+        especialidadeId:
+          type: integer
+          format: int64
+        codigoTuss:
+          type: string
+          maxLength: 20
+          description: Único
+          example: '30101012'
+        nome:
+          type: string
+          maxLength: 150
+          example: Biópsia de pele
+        descricao:
+          type: string
+          maxLength: 255
+        duracaoMinutos:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          example: 30
+        valorBase:
+          type: number
+          minimum: 0
+          example: 250.00
+        insumos:
+          type: array
+          description: Cada insumo só pode aparecer uma vez (senão 422)
+          items:
+            type: object
+            required: [insumoId, quantidade]
+            properties:
+              insumoId:
+                type: integer
+                format: int64
+              quantidade:
+                type: number
+                minimum: 0.001
+                example: 2
+    ProcedimentoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        especialidade:
+          $ref: '#/components/schemas/EspecialidadeResponse'
+        codigoTuss:
+          type: string
+        nome:
+          type: string
+        descricao:
+          type: string
+        duracaoMinutos:
+          type: integer
+        valorBase:
+          type: number
+        insumos:
+          type: array
+          items:
+            type: object
+            properties:
+              insumo:
+                $ref: '#/components/schemas/InsumoResponse'
+              quantidade:
+                type: number
+              custo:
+                type: number
+                description: custo unitário x quantidade
+        custoInsumos:
+          type: number
+          description: Soma do custo dos insumos (calcularCustoInsumos)
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    ProcedimentoPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcedimentoResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Custo do médico ----------
+    CustoMedicoRequest:
+      type: object
+      required: [tipo, medicoId, valor, vigenciaInicio]
+      properties:
+        tipo:
+          type: string
+          enum: [CONSULTA, PROCEDIMENTO]
+        medicoId:
+          type: integer
+          format: int64
+        especialidadeId:
+          type: integer
+          format: int64
+          description: Obrigatório para CONSULTA
+        procedimentoId:
+          type: integer
+          format: int64
+          description: Obrigatório para PROCEDIMENTO
+        valor:
+          type: number
+          minimum: 0
+          example: 200.00
+        vigenciaInicio:
+          type: string
+          format: date
+          example: '2025-01-01'
+        vigenciaFim:
+          type: string
+          format: date
+          description: Opcional (null = em aberto); não pode ser antes do início
+    CustoMedicoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tipo:
+          type: string
+          enum: [CONSULTA, PROCEDIMENTO]
+        medico:
+          $ref: '#/components/schemas/Referencia'
+        especialidade:
+          $ref: '#/components/schemas/Referencia'
+        procedimento:
+          $ref: '#/components/schemas/Referencia'
+        valor:
+          type: number
+        vigenciaInicio:
+          type: string
+          format: date
+        vigenciaFim:
+          type: string
+          format: date
+        vigente:
+          type: boolean
+          description: Vigente hoje (estaVigente)
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    CustoMedicoPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustoMedicoResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Disponibilidade ----------
+    DisponibilidadeRequest:
+      type: object
+      required: [tipo, medicoId, horaInicial, horaFinal]
+      properties:
+        tipo:
+          type: string
+          enum: [DIARIA, EXCECAO]
+        medicoId:
+          type: integer
+          format: int64
+        salaId:
+          type: integer
+          format: int64
+        horaInicial:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '08:00'
+        horaFinal:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          description: Deve ser depois da hora inicial (senão 422)
+          example: '12:00'
+        observacoes:
+          type: string
+          maxLength: 255
+        diaSemana:
+          $ref: '#/components/schemas/DiaSemana'
+        data:
+          type: string
+          format: date
+          description: Obrigatório para EXCECAO
+        disponivel:
+          type: boolean
+          description: Obrigatório para EXCECAO (false = bloqueio; true = horário extra)
+        motivo:
+          type: string
+          maxLength: 255
+          example: Congresso
+    DisponibilidadeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        tipo:
+          type: string
+          enum: [DIARIA, EXCECAO]
+        medico:
+          $ref: '#/components/schemas/Referencia'
+        sala:
+          $ref: '#/components/schemas/Referencia'
+        horaInicial:
+          type: string
+          example: '08:00'
+        horaFinal:
+          type: string
+          example: '12:00'
+        observacoes:
+          type: string
+        diaSemana:
+          $ref: '#/components/schemas/DiaSemana'
+        data:
+          type: string
+          format: date
+        disponivel:
+          type: boolean
+        motivo:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    DisponibilidadePage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisponibilidadeResponse'
         page:
           $ref: '#/components/schemas/PageMetadata'

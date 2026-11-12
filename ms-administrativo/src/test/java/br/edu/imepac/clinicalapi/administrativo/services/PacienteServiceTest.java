@@ -5,7 +5,10 @@ import br.edu.imepac.clinicalapi.administrativo.dto.PacienteRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
 import br.edu.imepac.clinicalapi.administrativo.mapper.PacienteMapper;
+import br.edu.imepac.clinicalapi.administrativo.entities.ResponsavelLegal;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
+import br.edu.imepac.clinicalapi.administrativo.repositories.ResponsavelLegalRepository;
+import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,12 +32,51 @@ class PacienteServiceTest {
 
     @Mock
     private PacienteRepository repository;
+    @Mock
+    private ResponsavelLegalRepository responsavelRepository;
 
     private PacienteService service;
 
     @BeforeEach
     void setUp() {
-        service = new PacienteService(repository, new PacienteMapper(new ModelMapperConfig().modelMapper()));
+        service = new PacienteService(repository, new PacienteMapper(new ModelMapperConfig().modelMapper()),
+                responsavelRepository);
+    }
+
+    @Test
+    void criar_menorSemResponsavel_deveLancarBusinessRule() {
+        PacienteRequest r = request();
+        r.setDataNascimento(LocalDate.now().minusYears(10));
+
+        assertThatThrownBy(() -> service.criar(r)).isInstanceOf(BusinessRuleException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void criar_menorComResponsavel_deveSalvarComIdadeCalculada() {
+        PacienteRequest r = request();
+        r.setDataNascimento(LocalDate.now().minusYears(10));
+        r.setResponsavelId(4L);
+        ResponsavelLegal responsavel = new ResponsavelLegal();
+        responsavel.setId(4L);
+        responsavel.setNome("Maria");
+        when(responsavelRepository.findById(4L)).thenReturn(Optional.of(responsavel));
+        when(repository.save(any(Paciente.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PacienteResponse response = service.criar(r);
+
+        assertThat(response.getIdade()).isEqualTo(10);
+        assertThat(response.isMenorDeIdade()).isTrue();
+        assertThat(response.getResponsavel().getNome()).isEqualTo("Maria");
+    }
+
+    @Test
+    void criar_responsavelInexistente_deveLancarBusinessRule() {
+        PacienteRequest r = request();
+        r.setResponsavelId(99L);
+        when(responsavelRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.criar(r)).isInstanceOf(BusinessRuleException.class);
     }
 
     private PacienteRequest request() {
