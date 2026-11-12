@@ -28,6 +28,9 @@ import static org.mockito.Mockito.when;
 class EspecialidadeServiceTest {
 
     @Mock
+    private EventoService eventos;
+
+    @Mock
     private EspecialidadeRepository repository;
     @Mock
     private MedicoRepository medicoRepository;
@@ -37,7 +40,7 @@ class EspecialidadeServiceTest {
     @BeforeEach
     void setUp() {
         EspecialidadeMapper mapper = new EspecialidadeMapper(new ModelMapperConfig().modelMapper());
-        service = new EspecialidadeService(repository, medicoRepository, mapper);
+        service = new EspecialidadeService(repository, medicoRepository, mapper, eventos);
     }
 
     private EspecialidadeRequest request(String nome) {

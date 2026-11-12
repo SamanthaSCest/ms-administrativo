@@ -17,9 +17,10 @@ public class SalaResponse {
     private boolean ativo;
     private String criadoPor;
     private String atualizadoPor;
-    private String identificacao;
+    private String numero;
     private TipoSala tipo;
     private String andar;
+    private String observacoes;
     private LocalDateTime dataCriacao;
     private LocalDateTime dataModificacao;
 }

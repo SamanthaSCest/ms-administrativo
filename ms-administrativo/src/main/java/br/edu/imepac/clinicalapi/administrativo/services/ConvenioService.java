@@ -24,6 +24,7 @@ public class ConvenioService {
 
     private final ConvenioRepository repository;
     private final ModelMapper modelMapper;
+    private final EventoService eventos;
 
     @Transactional
     public ConvenioResponse criar(ConvenioRequest request) {
@@ -34,7 +35,9 @@ public class ConvenioService {
         if (repository.existsByCnpj(request.getCnpj())) {
             throw new ConflictException("Já existe convênio com o CNPJ informado");
         }
-        return toResponse(repository.save(modelMapper.map(request, Convenio.class)));
+        Convenio salvo = repository.save(modelMapper.map(request, Convenio.class));
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -57,14 +60,19 @@ public class ConvenioService {
         if (repository.existsByCnpjAndIdNot(request.getCnpj(), id)) {
             throw new ConflictException("Já existe convênio com o CNPJ informado");
         }
+        var antes = eventos.retrato(toResponse(convenio));
         modelMapper.map(request, convenio);
-        return toResponse(repository.save(convenio));
+        var depois = toResponse(repository.save(convenio));
+        eventos.atualizado(convenio, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo convênio {}", id);
-        repository.delete(buscarEntidade(id));
+        var entidade = buscarEntidade(id);
+        eventos.removido(entidade);
+        repository.delete(entidade);
     }
 
     private Convenio buscarEntidade(Long id) {

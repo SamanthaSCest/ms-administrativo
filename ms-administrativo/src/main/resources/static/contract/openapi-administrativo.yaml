@@ -674,6 +674,225 @@ paths:
                 $ref: '#/components/schemas/PacienteContato'
         '404':
           $ref: '#/components/responses/NotFound'
+  /integracao/pacientes:
+    get:
+      tags: [Integração]
+      summary: Pacientes em lote (até 100 ids)
+      description: Ids inexistentes são ignorados. CPF sempre mascarado.
+      operationId: integracaoPacientesLote
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Ids'
+      responses:
+        '200':
+          description: Resumos, ordenados por id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PacienteResumo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /integracao/especialidades:
+    get:
+      tags: [Integração]
+      summary: Especialidades ativas
+      operationId: integracaoEspecialidades
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Especialidades ativas, por nome
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EspecialidadeResumo'
+  /integracao/medicos:
+    get:
+      tags: [Integração]
+      summary: Médicos em lote e/ou por especialidade
+      description: |
+        `ids` (até 100) traz os médicos informados, de qualquer status. `especialidadeId` traz os médicos **ativos**
+        que atendem a especialidade. Com os dois, devolve a interseção. Sem nenhum dos dois: 422.
+      operationId: integracaoMedicos
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: ids
+          in: query
+          description: Ids separados por vírgula (até 100)
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+          style: form
+          explode: false
+        - name: especialidadeId
+          in: query
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Resumos, ordenados por nome
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MedicoResumo'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+  /integracao/medicos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Resumo do médico
+      operationId: integracaoMedico
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resumo do médico (sem CPF)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicoResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /integracao/medicos/{id}/situacao:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Checagem rápida de existência do médico
+      description: Responde 200 mesmo quando o id não existe (existe = false).
+      operationId: integracaoSituacaoMedico
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Situação do médico
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Situacao'
+  /integracao/medicos/{id}/atende:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: O médico atende a especialidade?
+      description: false se o médico não existir, estiver inativo ou não atender a especialidade (ativa).
+      operationId: integracaoMedicoAtende
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: especialidadeId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AtendeResponse'
+  /integracao/salas:
+    get:
+      tags: [Integração]
+      summary: Salas ativas, opcionalmente de um tipo
+      operationId: integracaoSalas
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: tipo
+          in: query
+          schema:
+            $ref: '#/components/schemas/TipoSala'
+      responses:
+        '200':
+          description: Salas ativas, por número
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SalaResumo'
+  /integracao/salas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Resumo da sala
+      operationId: integracaoSala
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resumo da sala
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /integracao/convenios:
+    get:
+      tags: [Integração]
+      summary: Convênios ativos
+      description: Planos ficam com outro grupo e não fazem parte desta API.
+      operationId: integracaoConvenios
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Convênios ativos, por nome
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConvenioResumo'
+  /integracao/convenios/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Resumo do convênio
+      operationId: integracaoConvenio
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resumo do convênio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConvenioResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /responsaveis:
     get:
@@ -1528,6 +1747,19 @@ components:
       description: Chave de integração entre microserviços (`INTEGRACAO_API_KEY`). Acesso somente leitura.
 
   parameters:
+    Ids:
+      name: ids
+      in: query
+      required: true
+      description: Ids separados por vírgula (até 100)
+      schema:
+        type: array
+        items:
+          type: integer
+          format: int64
+      style: form
+      explode: false
+      example: [1, 2, 3]
     Id:
       name: id
       in: path
@@ -1902,6 +2134,87 @@ components:
         dataNascimento:
           type: string
           format: date
+        uuid:
+          type: string
+          format: uuid
+        ativo:
+          type: boolean
+    EspecialidadeResumo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        ativo:
+          type: boolean
+    MedicoResumo:
+      type: object
+      description: Sem CPF. Também é o campo `dados` dos eventos medico.*
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        crm:
+          type: string
+        ufCrm:
+          $ref: '#/components/schemas/UF'
+        especialidades:
+          type: array
+          items:
+            $ref: '#/components/schemas/EspecialidadeResumo'
+        ativo:
+          type: boolean
+    SalaResumo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        numero:
+          type: string
+        tipo:
+          $ref: '#/components/schemas/TipoSala'
+        andar:
+          type: string
+        observacoes:
+          type: string
+        ativo:
+          type: boolean
+    ConvenioResumo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        registroAns:
+          type: string
+        cnpj:
+          type: string
+        ativo:
+          type: boolean
+    AtendeResponse:
+      type: object
+      properties:
+        atende:
+          type: boolean
     Situacao:
       type: object
       properties:
@@ -2127,7 +2440,7 @@ components:
       description: Define o nível de acesso (ADMINISTRADOR → ADMIN; demais → FUNCIONARIO)
     TipoSala:
       type: string
-      enum: [CONSULTORIO, EXAME, PROCEDIMENTO, CIRURGIA]
+      enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO]
     DiaSemana:
       type: string
       enum: [DOMINGO, SEGUNDA, TERCA, QUARTA, QUINTA, SEXTA, SABADO]
@@ -2315,19 +2628,23 @@ components:
     # ---------- Sala ----------
     SalaRequest:
       type: object
-      required: [identificacao, tipo]
+      required: [numero, tipo]
       properties:
-        identificacao:
+        numero:
           type: string
           maxLength: 50
-          description: Única
-          example: Consultório 1
+          description: Número da sala/consultório. Único.
+          example: '101'
         tipo:
           $ref: '#/components/schemas/TipoSala'
         andar:
           type: string
           maxLength: 20
           example: 1º
+        observacoes:
+          type: string
+          maxLength: 255
+          example: Acesso para cadeirantes
     SalaResponse:
       type: object
       properties:
@@ -2347,11 +2664,13 @@ components:
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
-        identificacao:
+        numero:
           type: string
         tipo:
           $ref: '#/components/schemas/TipoSala'
         andar:
+          type: string
+        observacoes:
           type: string
         dataCriacao:
           type: string

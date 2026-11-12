@@ -1,9 +1,8 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-/** Tipo de sala da clínica (diagrama: Enum TipoSala). */
+/** Finalidade da sala da clínica. */
 public enum TipoSala {
     CONSULTORIO,
-    EXAME,
-    PROCEDIMENTO,
-    CIRURGIA
+    CIRURGIA,
+    PROCEDIMENTO
 }

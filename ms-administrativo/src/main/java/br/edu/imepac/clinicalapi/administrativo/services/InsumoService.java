@@ -31,6 +31,7 @@ public class InsumoService {
     private final InsumoRepository repository;
     private final ProcedimentoRepository procedimentoRepository;
     private final ModelMapper modelMapper;
+    private final EventoService eventos;
 
     @Transactional
     public InsumoResponse criar(InsumoRequest request) {
@@ -38,7 +39,9 @@ public class InsumoService {
         if (repository.existsByCodigoIgnoreCase(request.getCodigo())) {
             throw new ConflictException("Já existe insumo com o código: " + request.getCodigo());
         }
-        return toResponse(repository.save(modelMapper.map(request, Insumo.class)));
+        Insumo salvo = repository.save(modelMapper.map(request, Insumo.class));
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -58,16 +61,22 @@ public class InsumoService {
         if (repository.existsByCodigoIgnoreCaseAndIdNot(request.getCodigo(), id)) {
             throw new ConflictException("Já existe insumo com o código: " + request.getCodigo());
         }
+        var antes = eventos.retrato(toResponse(insumo));
         modelMapper.map(request, insumo);
-        return toResponse(repository.save(insumo));
+        var depois = toResponse(repository.save(insumo));
+        eventos.atualizado(insumo, antes, depois);
+        return depois;
     }
 
     @Transactional
     public InsumoResponse atualizarCusto(Long id, BigDecimal custoUnitario) {
         log.info("Atualizando custo do insumo {}", id);
         Insumo insumo = buscarEntidade(id);
+        var antes = eventos.retrato(toResponse(insumo));
         insumo.setCustoUnitario(custoUnitario);
-        return toResponse(repository.save(insumo));
+        var depois = toResponse(repository.save(insumo));
+        eventos.atualizado(insumo, antes, depois);
+        return depois;
     }
 
     @Transactional
@@ -77,6 +86,7 @@ public class InsumoService {
         if (procedimentoRepository.existsByInsumosInsumoId(id)) {
             throw new ConflictException("Insumo é usado em procedimentos e não pode ser removido");
         }
+        eventos.removido(insumo);
         repository.delete(insumo);
     }
 

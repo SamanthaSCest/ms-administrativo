@@ -40,6 +40,7 @@ public class DisponibilidadeService {
     private final DisponibilidadeMedicaRepository repository;
     private final MedicoService medicoService;
     private final SalaService salaService;
+    private final EventoService eventos;
 
     @Transactional
     public DisponibilidadeResponse criar(DisponibilidadeRequest request) {
@@ -47,7 +48,9 @@ public class DisponibilidadeService {
         DisponibilidadeMedica disponibilidade = request.tipo() == TipoDisponibilidade.DIARIA
                 ? new DisponibilidadeDiaria() : new DisponibilidadeExcecao();
         preencher(disponibilidade, request);
-        return toResponse(repository.save(disponibilidade));
+        var salvo = repository.save(disponibilidade);
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -98,14 +101,19 @@ public class DisponibilidadeService {
         if (disponibilidade.getTipo() != request.tipo()) {
             throw new BusinessRuleException("O tipo da disponibilidade não pode ser alterado; remova e cadastre outra");
         }
+        var antes = eventos.retrato(toResponse(disponibilidade));
         preencher(disponibilidade, request);
-        return toResponse(repository.save(disponibilidade));
+        var depois = toResponse(repository.save(disponibilidade));
+        eventos.atualizado(disponibilidade, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo disponibilidade {}", id);
-        repository.delete(buscarEntidade(id));
+        var entidade = buscarEntidade(id);
+        eventos.removido(entidade);
+        repository.delete(entidade);
     }
 
     private DisponibilidadeMedica buscarEntidade(Long id) {
@@ -172,7 +180,7 @@ public class DisponibilidadeService {
     }
 
     private DisponibilidadeResponse toResponse(DisponibilidadeMedica d) {
-        Referencia sala = d.getSala() == null ? null : new Referencia(d.getSala().getId(), d.getSala().getIdentificacao());
+        Referencia sala = d.getSala() == null ? null : new Referencia(d.getSala().getId(), d.getSala().getNumero());
         var diaSemana = d instanceof DisponibilidadeDiaria diaria ? diaria.getDiaSemana() : null;
         DisponibilidadeExcecao excecao = d instanceof DisponibilidadeExcecao e ? e : null;
         return new DisponibilidadeResponse(d.getId(), d.getTipo(),

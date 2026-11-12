@@ -237,3 +237,6 @@ monte resposta de erro no controller) → controller → testes unitário e de i
 Fora do escopo desta entrega (modelados no diagrama, ficam para os alunos): Funcionário, Cargo, Convênio,
 Procedimento, Insumo, Disponibilidade médica, Retorno e Exame (em `ms-agendamento`, estendem `Agendamento`),
 além de `ms-atendimento`, `ms-estoque` e `ms-fatceira`.
+
+## Regras de Banco de Dados
+- A exclusão de prontuários utiliza o comportamento `ON DELETE CASCADE` para garantir a integridade dos registros dependentes de forma automática.
