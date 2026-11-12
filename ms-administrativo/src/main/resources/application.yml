@@ -19,8 +19,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    username: ${RABBITMQ_USER:clinical}
+    password: ${RABBITMQ_PASSWORD:clinical}
     publisher-confirm-type: correlated  # o RabbitMQ confirma cada mensagem recebida
     publisher-returns: true             # avisa quando nenhuma fila assina o evento
     template:
