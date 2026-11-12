@@ -63,7 +63,7 @@ class CustoDisponibilidadeApiTest {
         cardio = id(criar("/especialidades", "{\"nome\":\"Cardiologia\"}"));
         dermato = id(criar("/especialidades", "{\"nome\":\"Dermatologia\"}"));
         medico = criarMedico("12345678901", "1001");
-        sala = id(criar("/salas", "{\"identificacao\":\"Consultório 1\",\"tipo\":\"CONSULTORIO\"}"));
+        sala = id(criar("/salas", "{\"numero\":\"101\",\"tipo\":\"CONSULTORIO\"}"));
     }
 
     // Custos e disponibilidades somem junto com o médico (ON DELETE CASCADE)
@@ -180,7 +180,7 @@ class CustoDisponibilidadeApiTest {
                         .content(diaria(medico, "SEGUNDA", "08:00", "12:00", sala)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.horaInicial").value("08:00"))
-                .andExpect(jsonPath("$.sala.descricao").value("Consultório 1"));
+                .andExpect(jsonPath("$.sala.descricao").value("101"));
 
         // Mesmo médico, horário sobreposto -> 409
         mockMvc.perform(post("/disponibilidades").contentType(MediaType.APPLICATION_JSON)

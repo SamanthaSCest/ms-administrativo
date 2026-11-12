@@ -11,13 +11,17 @@ import lombok.Setter;
 @Setter
 public class SalaRequest {
 
+    /** Número da sala/consultório. Único. */
     @NotBlank(message = "é obrigatório")
     @Size(max = 50, message = "deve ter no máximo 50 caracteres")
-    private String identificacao;
+    private String numero;
 
     @NotNull(message = "é obrigatório")
     private TipoSala tipo;
 
     @Size(max = 20, message = "deve ter no máximo 20 caracteres")
     private String andar;
+
+    @Size(max = 255, message = "deve ter no máximo 255 caracteres")
+    private String observacoes;
 }

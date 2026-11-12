@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SalaRepository extends JpaRepository<Sala, Long> {
 
-    boolean existsByIdentificacaoIgnoreCase(String identificacao);
+    boolean existsByNumeroIgnoreCase(String numero);
 
-    boolean existsByIdentificacaoIgnoreCaseAndIdNot(String identificacao, Long id);
+    boolean existsByNumeroIgnoreCaseAndIdNot(String numero, Long id);
 }

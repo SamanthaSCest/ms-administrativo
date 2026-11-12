@@ -85,7 +85,7 @@ class CadastrosApoioApiTest {
 
     @Test
     void sala_crudEUnicidade() throws Exception {
-        String body = "{\"identificacao\":\"Consultório 1\",\"tipo\":\"CONSULTORIO\",\"andar\":\"1º\"}";
+        String body = "{\"numero\":\"101\",\"tipo\":\"CONSULTORIO\",\"andar\":\"1º\"}";
         MvcResult result = mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tipo").value("CONSULTORIO"))
@@ -93,7 +93,7 @@ class CadastrosApoioApiTest {
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
 
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
-                        .content(body.replace("Consultório 1", "consultório 1")))
+                        .content(body))
                 .andExpect(status().isConflict());
 
         mockMvc.perform(get("/salas")).andExpect(status().isOk()).andExpect(jsonPath("$.page.totalElements").value(1));
@@ -103,8 +103,25 @@ class CadastrosApoioApiTest {
     @Test
     void sala_tipoInvalido_retorna400() throws Exception {
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"identificacao\":\"S1\",\"tipo\":\"COZINHA\"}"))
+                        .content("{\"numero\":\"S1\",\"tipo\":\"COZINHA\"}"))
                 .andExpect(status().isBadRequest());
+        // EXAME deixou de existir: tipos válidos são CONSULTORIO, CIRURGIA e PROCEDIMENTO
+        mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"numero\":\"S1\",\"tipo\":\"EXAME\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void sala_cirurgiaComNumeroAndarEObservacoes() throws Exception {
+        mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"numero":"C2","tipo":"CIRURGIA","andar":"2º","observacoes":"Possui foco cirúrgico duplo"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.numero").value("C2"))
+                .andExpect(jsonPath("$.tipo").value("CIRURGIA"))
+                .andExpect(jsonPath("$.andar").value("2º"))
+                .andExpect(jsonPath("$.observacoes").value("Possui foco cirúrgico duplo"));
     }
 
     @Test
@@ -112,7 +129,7 @@ class CadastrosApoioApiTest {
     void funcionario_consultaMasNaoAltera() throws Exception {
         mockMvc.perform(get("/salas")).andExpect(status().isOk());
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"identificacao\":\"S1\",\"tipo\":\"EXAME\"}"))
+                        .content("{\"numero\":\"S1\",\"tipo\":\"PROCEDIMENTO\"}"))
                 .andExpect(status().isForbidden());
     }
 }

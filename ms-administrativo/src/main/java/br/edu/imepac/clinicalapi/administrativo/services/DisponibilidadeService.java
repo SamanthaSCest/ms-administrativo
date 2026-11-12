@@ -172,7 +172,7 @@ public class DisponibilidadeService {
     }
 
     private DisponibilidadeResponse toResponse(DisponibilidadeMedica d) {
-        Referencia sala = d.getSala() == null ? null : new Referencia(d.getSala().getId(), d.getSala().getIdentificacao());
+        Referencia sala = d.getSala() == null ? null : new Referencia(d.getSala().getId(), d.getSala().getNumero());
         var diaSemana = d instanceof DisponibilidadeDiaria diaria ? diaria.getDiaSemana() : null;
         DisponibilidadeExcecao excecao = d instanceof DisponibilidadeExcecao e ? e : null;
         return new DisponibilidadeResponse(d.getId(), d.getTipo(),

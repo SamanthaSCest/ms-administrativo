@@ -30,9 +30,9 @@ public class SalaService {
 
     @Transactional
     public SalaResponse criar(SalaRequest request) {
-        log.info("Criando sala '{}'", request.getIdentificacao());
-        if (repository.existsByIdentificacaoIgnoreCase(request.getIdentificacao())) {
-            throw new ConflictException("Já existe sala com a identificação: " + request.getIdentificacao());
+        log.info("Criando sala '{}'", request.getNumero());
+        if (repository.existsByNumeroIgnoreCase(request.getNumero())) {
+            throw new ConflictException("Já existe sala com o número: " + request.getNumero());
         }
         return toResponse(repository.save(modelMapper.map(request, Sala.class)));
     }
@@ -51,8 +51,8 @@ public class SalaService {
     public SalaResponse atualizar(Long id, SalaRequest request) {
         log.info("Atualizando sala {}", id);
         Sala sala = buscarEntidade(id);
-        if (repository.existsByIdentificacaoIgnoreCaseAndIdNot(request.getIdentificacao(), id)) {
-            throw new ConflictException("Já existe sala com a identificação: " + request.getIdentificacao());
+        if (repository.existsByNumeroIgnoreCaseAndIdNot(request.getNumero(), id)) {
+            throw new ConflictException("Já existe sala com o número: " + request.getNumero());
         }
         modelMapper.map(request, sala);
         return toResponse(repository.save(sala));
@@ -73,7 +73,7 @@ public class SalaService {
     public Sala buscarReferencia(Long id) {
         Sala sala = repository.findById(id).orElseThrow(() -> new BusinessRuleException("Sala não encontrada: " + id));
         if (!sala.isAtivo()) {
-            throw new BusinessRuleException("Sala inativa: " + sala.getIdentificacao());
+            throw new BusinessRuleException("Sala inativa: " + sala.getNumero());
         }
         return sala;
     }
