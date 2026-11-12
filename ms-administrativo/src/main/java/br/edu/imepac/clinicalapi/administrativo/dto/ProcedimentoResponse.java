@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.List;
 
 /**
@@ -17,6 +18,11 @@ public record ProcedimentoResponse(
         BigDecimal valorBase,
         List<ItemInsumo> insumos,
         BigDecimal custoInsumos,
+        /** EntidadeBase: identificador público, status e auditoria. */
+        UUID uuid,
+        boolean ativo,
+        String criadoPor,
+        String atualizadoPor,
         LocalDateTime dataCriacao,
         LocalDateTime dataModificacao) {
 

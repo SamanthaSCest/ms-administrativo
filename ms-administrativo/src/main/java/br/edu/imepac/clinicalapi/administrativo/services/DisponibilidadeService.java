@@ -68,8 +68,12 @@ public class DisponibilidadeService {
      */
     @Transactional(readOnly = true)
     public List<DisponibilidadeResponse> agenda(Long medicoId, LocalDate data) {
-        medicoService.buscarReferencia(medicoId);
+        // Médico inativo (ou disponibilidade inativa) não aparece na agenda
+        if (!medicoService.buscarExistente(medicoId).isAtivo()) {
+            return List.of();
+        }
         List<DisponibilidadeMedica> doDia = repository.findAllByMedicoId(medicoId).stream()
+                .filter(DisponibilidadeMedica::isAtivo)
                 .filter(d -> d.aplicaEm(data))
                 .toList();
         List<DisponibilidadeExcecao> bloqueios = doDia.stream()
@@ -137,6 +141,7 @@ public class DisponibilidadeService {
 
     private void validarConflitos(DisponibilidadeMedica d) {
         boolean medicoOcupado = repository.findAllByMedicoId(d.getMedico().getId()).stream()
+                .filter(DisponibilidadeMedica::isAtivo)
                 .anyMatch(outra -> !Objects.equals(outra.getId(), d.getId())
                         && mesmoDia(outra, d)
                         && outra.sobrepoeHorario(d));
@@ -176,6 +181,7 @@ public class DisponibilidadeService {
                 excecao == null ? null : excecao.getData(),
                 excecao == null ? null : excecao.getDisponivel(),
                 excecao == null ? null : excecao.getMotivo(),
+                d.getUuid(), d.isAtivo(), d.getCriadoPor(), d.getAtualizadoPor(),
                 d.getDataCriacao(), d.getDataModificacao());
     }
 }

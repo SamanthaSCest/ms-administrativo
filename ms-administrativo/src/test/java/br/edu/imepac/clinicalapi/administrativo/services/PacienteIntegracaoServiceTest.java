@@ -75,14 +75,23 @@ class PacienteIntegracaoServiceTest {
 
     @Test
     void buscarSituacao_existente() {
-        when(repository.existsById(7L)).thenReturn(true);
+        when(repository.findById(7L)).thenReturn(Optional.of(new Paciente()));
 
         assertThat(service.buscarSituacao(7L)).isEqualTo(new SituacaoResponse(true, true));
     }
 
     @Test
+    void buscarSituacao_inativo() {
+        Paciente inativo = new Paciente();
+        inativo.inativar();
+        when(repository.findById(8L)).thenReturn(Optional.of(inativo));
+
+        assertThat(service.buscarSituacao(8L)).isEqualTo(new SituacaoResponse(true, false));
+    }
+
+    @Test
     void buscarSituacao_inexistente_naoLancaErro() {
-        when(repository.existsById(1L)).thenReturn(false);
+        when(repository.findById(1L)).thenReturn(Optional.empty());
 
         assertThat(service.buscarSituacao(1L)).isEqualTo(new SituacaoResponse(false, false));
     }

@@ -85,6 +85,11 @@ public class PacienteService {
         if (responsavelId != null) {
             responsavel = responsavelRepository.findById(responsavelId)
                     .orElseThrow(() -> new BusinessRuleException("Responsável legal não encontrado: " + responsavelId));
+            boolean mesmoDeAntes = paciente.getResponsavel() != null
+                    && responsavelId.equals(paciente.getResponsavel().getId());
+            if (!responsavel.isAtivo() && !mesmoDeAntes) {
+                throw new BusinessRuleException("Responsável legal inativo: " + responsavelId);
+            }
         }
         if (responsavel == null && paciente.ehMenorDeIdade()) {
             throw new BusinessRuleException("Paciente menor de idade precisa de um responsável legal");

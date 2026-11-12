@@ -52,7 +52,7 @@ public class MedicoService {
         }
         Medico medico = mapper.toEntity(request);
         // O mapper não preenche as especialidades: buscamos pelos ids informados (422 se algum não existir)
-        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds()));
+        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), Set.of()));
         // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
         medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
         log.debug("Salvando médico {}", medico.getNome());
@@ -81,7 +81,7 @@ public class MedicoService {
         }
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
-        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds()));
+        medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), medico.getEspecialidades()));
         usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
         return mapper.toResponse(repository.save(medico));
     }
@@ -92,9 +92,19 @@ public class MedicoService {
         repository.delete(buscarEntidade(id));
     }
 
-    /** Para outros services (custos, disponibilidade): médico informado no corpo que não existe -> 422. */
+    /** Para outros services (custos, disponibilidade): médico do corpo inexistente ou inativo -> 422. */
     @Transactional(readOnly = true)
     public Medico buscarReferencia(Long id) {
+        Medico medico = buscarExistente(id);
+        if (!medico.isAtivo()) {
+            throw new BusinessRuleException("Médico inativo: " + id);
+        }
+        return medico;
+    }
+
+    /** Médico informado existe (422 se não)? Não exige que esteja ativo. */
+    @Transactional(readOnly = true)
+    public Medico buscarExistente(Long id) {
         return repository.findById(id).orElseThrow(() -> new BusinessRuleException("Médico não encontrado: " + id));
     }
 
@@ -102,12 +112,22 @@ public class MedicoService {
         return repository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Médico", id));
     }
 
-    private Set<Especialidade> buscarEspecialidades(Set<Long> ids) {
+    /**
+     * Resolve as especialidades pelos ids (422 se alguma não existir). Especialidade inativa só é aceita
+     * se o médico já a tinha (não cria vínculo novo com cadastro inativo).
+     */
+    private Set<Especialidade> buscarEspecialidades(Set<Long> ids, Set<Especialidade> atuais) {
+        Set<Long> idsAtuais = new HashSet<>();
+        atuais.forEach(e -> idsAtuais.add(e.getId()));
         Set<Especialidade> especialidades = new HashSet<>();
         for (Long id : ids) {
-            especialidades.add(especialidadeRepository.findById(id)
+            Especialidade especialidade = especialidadeRepository.findById(id)
                     // 422 (e não 404): o recurso da URL existe, mas um dado do corpo referencia algo inválido
-                    .orElseThrow(() -> new BusinessRuleException("Especialidade não encontrada: " + id)));
+                    .orElseThrow(() -> new BusinessRuleException("Especialidade não encontrada: " + id));
+            if (!especialidade.isAtivo() && !idsAtuais.contains(id)) {
+                throw new BusinessRuleException("Especialidade inativa: " + especialidade.getNome());
+            }
+            especialidades.add(especialidade);
         }
         return especialidades;
     }

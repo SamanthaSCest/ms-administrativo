@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,7 +13,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "salas")
-public class Sala extends BaseEntity {
+public class Sala extends EntidadeBase {
 
     /** Ex.: "Consultório 3". Única. */
     @Column(nullable = false, unique = true, length = 50)

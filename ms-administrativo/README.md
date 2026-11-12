@@ -130,4 +130,24 @@ Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUse
 
 Enums: `Sexo`, `Cargo`, `TipoSala`, `DiaSemana`, `UF`. Custos e disponibilidades são **composição** do médico: removidos junto com ele (`ON DELETE CASCADE`). Migrations V4 a V9.
 
-**Ainda não implementado (decisão do time):** a `EntidadeBase` do diagrama com `UUID id`, `ativo` (`inativar()`/`reativar()`) e auditoria (`criadoPor`/`atualizadoPor`). Trocar `Long` por `UUID` afeta todas as tabelas e o ms-agendamento, que guarda `medicoId`/`pacienteId` como número; por isso ficou para uma etapa própria, coordenada entre os serviços.
+### EntidadeBase (uuid, ativo e auditoria)
+
+Todas as entidades acima estendem `entities/EntidadeBase`, que acrescenta à `BaseEntity` do `common` (id + datas):
+
+| Campo | O que é |
+|---|---|
+| `uuid` | Identificador público adicional, único, gerado na criação. **A chave continua sendo o `id` (BIGINT)** |
+| `ativo` | `inativar()` / `reativar()` via `PATCH /{recurso}/{id}/status` com `{"ativo": false}` |
+| `criadoPor` / `atualizadoPor` | Login de quem criou/alterou (Spring Data Auditing, `config/AuditoriaConfig`): o `sub` do JWT, `servico` para X-Api-Key ou `sistema` sem usuário |
+
+Por que o `id` não virou UUID: o ms-agendamento referencia médicos e pacientes como número em todas as camadas (`medico_id BIGINT` na tabela, `Long medicoId` na entidade, no DTO e no cliente HTTP). Trocar a chave quebraria a integração; o `uuid` como coluna extra entrega o identificador do diagrama sem esse risco. Pelo mesmo motivo a `EntidadeBase` fica neste módulo, e não no `common` (o `Agendamento` também estende a `BaseEntity`). As datas mantêm os nomes `dataCriacao`/`dataModificacao` da `BaseEntity` (no diagrama: `criadoEm`/`atualizadoEm`).
+
+Regras de inativação:
+- Inativar **não apaga**: o registro continua consultável. O `DELETE` continua apagando de verdade.
+- Cadastro inativo não entra em vínculo **novo** (médico/sala/procedimento/especialidade/insumo/responsável → 422); vínculos já existentes são preservados.
+- Custos e disponibilidades inativos são ignorados (vigência, conflitos e agenda); médico inativo tem agenda vazia.
+- Inativar médico ou funcionário bloqueia o login; ninguém inativa o próprio cadastro (422).
+- `GET /integracao/pacientes/{id}/situacao` devolve `ativo` real do paciente.
+- Quem pode inativar segue a regra de escrita de cada recurso (ex.: pacientes → ADMIN/FUNCIONARIO; médicos → ADMIN).
+
+Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do banco) para os registros existentes.

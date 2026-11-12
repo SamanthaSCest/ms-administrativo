@@ -68,6 +68,8 @@ tags:
     description: Valor de consulta (por especialidade) ou de procedimento, com vigência
   - name: Disponibilidades
     description: Horários de atendimento dos médicos, cadastrados pelo ADMIN
+  - name: Ativação
+    description: Inativar/reativar cadastros (EntidadeBase) sem apagá-los
   - name: Integração
     description: Leituras para outros microserviços (somente leitura, CPF mascarado)
 
@@ -641,7 +643,7 @@ paths:
     get:
       tags: [Integração]
       summary: Checagem rápida de existência do paciente
-      description: Responde 200 mesmo quando o id não existe (existe = false), para o chamador não tratar como erro.
+      description: Responde 200 mesmo quando o id não existe (existe = false), para o chamador não tratar como erro. `ativo` = false quando o paciente foi inativado.
       operationId: integracaoSituacaoPaciente
       security:
         - apiKey: []
@@ -1465,6 +1467,53 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /{recurso}/{id}/status:
+    parameters:
+      - name: recurso
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [especialidades, medicos, pacientes, funcionarios, convenios, salas, responsaveis, insumos,
+                 procedimentos, custos-medicos, disponibilidades]
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Ativação]
+      summary: Ativa ou inativa um cadastro (inativar/reativar da EntidadeBase)
+      description: |
+        Inativar **não apaga**: o registro continua consultável, mas não pode entrar em vínculos novos (422) e
+        custos/disponibilidades inativos são ignorados. Inativar médico ou funcionário também bloqueia o login;
+        ninguém pode inativar o próprio cadastro (422). Quem pode chamar segue a regra de **escrita** do recurso
+        (ex.: pacientes → ADMIN ou FUNCIONARIO; médicos → ADMIN; insumos → ADMIN ou ms-estoque).
+        Usuários têm o endpoint próprio `PATCH /usuarios/{id}/status`.
+      operationId: alterarStatusCadastro
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusRequest'
+      responses:
+        '200':
+          description: Status alterado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1612,6 +1661,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         descricao:
@@ -1680,6 +1742,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         cpf:
@@ -1759,6 +1834,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         cpf:
@@ -1974,6 +2062,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         cpf:
@@ -2102,6 +2203,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         cpf:
@@ -2159,6 +2273,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         nome:
           type: string
         registroAns:
@@ -2207,6 +2334,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         identificacao:
           type: string
         tipo:
@@ -2268,6 +2408,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         codigo:
           type: string
         nome:
@@ -2343,6 +2496,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         especialidade:
           $ref: '#/components/schemas/EspecialidadeResponse'
         codigoTuss:
@@ -2423,6 +2589,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         tipo:
           type: string
           enum: [CONSULTA, PROCEDIMENTO]
@@ -2504,6 +2683,19 @@ components:
         id:
           type: integer
           format: int64
+        uuid:
+          type: string
+          format: uuid
+          description: Identificador público (EntidadeBase). A chave usada nas URLs continua sendo o id.
+        ativo:
+          type: boolean
+          description: false = inativado (PATCH /{recurso}/{id}/status)
+        criadoPor:
+          type: string
+          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+        atualizadoPor:
+          type: string
+          description: Login de quem fez a última alteração
         tipo:
           type: string
           enum: [DIARIA, EXCECAO]
@@ -2543,3 +2735,32 @@ components:
             $ref: '#/components/schemas/DisponibilidadeResponse'
         page:
           $ref: '#/components/schemas/PageMetadata'
+
+    # ---------- Ativação (EntidadeBase) ----------
+    StatusRequest:
+      type: object
+      required: [ativo]
+      properties:
+        ativo:
+          type: boolean
+          description: true = reativar; false = inativar
+          example: false
+    StatusResponse:
+      type: object
+      properties:
+        recurso:
+          type: string
+          example: medicos
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        ativo:
+          type: boolean
+        atualizadoPor:
+          type: string
+        dataModificacao:
+          type: string
+          format: date-time

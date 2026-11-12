@@ -71,6 +71,7 @@ public class CustoMedicoService {
             throw new BusinessRuleException("Informe especialidadeId (consulta) ou procedimentoId, apenas um deles");
         }
         return repository.findAllByMedicoId(medicoId).stream()
+                .filter(CustoMedico::isAtivo)
                 .filter(c -> c.estaVigente(data))
                 .filter(c -> especialidadeId != null
                         ? c instanceof CustoMedicoConsulta cc && cc.getEspecialidade().getId().equals(especialidadeId)
@@ -121,6 +122,9 @@ public class CustoMedicoService {
             if (!medico.atende(especialidade)) {
                 throw new BusinessRuleException("O médico não atende a especialidade " + especialidade.getNome());
             }
+            if (!especialidade.isAtivo()) {
+                throw new BusinessRuleException("Especialidade inativa: " + especialidade.getNome());
+            }
             consulta.setEspecialidade(especialidade);
         } else if (custo instanceof CustoMedicoProcedimento porProcedimento) {
             if (request.procedimentoId() == null) {
@@ -135,6 +139,7 @@ public class CustoMedicoService {
         }
 
         boolean sobreposto = repository.findAllByMedicoId(medico.getId()).stream()
+                .filter(CustoMedico::isAtivo)
                 .anyMatch(outro -> !Objects.equals(outro.getId(), custo.getId())
                         && outro.mesmoItem(custo)
                         && outro.sobrepoe(custo.getVigenciaInicio(), custo.getVigenciaFim()));
@@ -155,6 +160,7 @@ public class CustoMedicoService {
         return new CustoMedicoResponse(c.getId(), c.getTipo(),
                 new Referencia(c.getMedico().getId(), c.getMedico().getNome()), especialidade, procedimento,
                 c.getValor(), c.getVigenciaInicio(), c.getVigenciaFim(), c.estaVigente(LocalDate.now()),
+                c.getUuid(), c.isAtivo(), c.getCriadoPor(), c.getAtualizadoPor(),
                 c.getDataCriacao(), c.getDataModificacao());
     }
 }

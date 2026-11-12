@@ -91,7 +91,12 @@ public class ProcedimentoService {
     /** Para outros services (custo médico): procedimento informado no corpo que não existe -> 422. */
     @Transactional(readOnly = true)
     public Procedimento buscarReferencia(Long id) {
-        return repository.findById(id).orElseThrow(() -> new BusinessRuleException("Procedimento não encontrado: " + id));
+        Procedimento procedimento = repository.findById(id)
+                .orElseThrow(() -> new BusinessRuleException("Procedimento não encontrado: " + id));
+        if (!procedimento.isAtivo()) {
+            throw new BusinessRuleException("Procedimento inativo: " + procedimento.getCodigoTuss());
+        }
+        return procedimento;
     }
 
     private Procedimento buscarEntidade(Long id) {
@@ -101,6 +106,11 @@ public class ProcedimentoService {
     private void preencher(Procedimento procedimento, ProcedimentoRequest request) {
         Especialidade especialidade = especialidadeRepository.findById(request.getEspecialidadeId())
                 .orElseThrow(() -> new BusinessRuleException("Especialidade não encontrada: " + request.getEspecialidadeId()));
+        boolean mesmaDeAntes = procedimento.getEspecialidade() != null
+                && procedimento.getEspecialidade().getId().equals(especialidade.getId());
+        if (!especialidade.isAtivo() && !mesmaDeAntes) {
+            throw new BusinessRuleException("Especialidade inativa: " + especialidade.getNome());
+        }
         procedimento.setEspecialidade(especialidade);
         procedimento.setCodigoTuss(request.getCodigoTuss());
         procedimento.setNome(request.getNome());
@@ -131,6 +141,9 @@ public class ProcedimentoService {
             if (!jaExistentes.contains(item.insumoId())) {
                 Insumo insumo = insumoRepository.findById(item.insumoId())
                         .orElseThrow(() -> new BusinessRuleException("Insumo não encontrado: " + item.insumoId()));
+                if (!insumo.isAtivo()) {
+                    throw new BusinessRuleException("Insumo inativo: " + insumo.getCodigo());
+                }
                 procedimento.adicionarInsumo(insumo, item.quantidade());
             }
         }
@@ -143,6 +156,7 @@ public class ProcedimentoService {
                 .toList();
         return new ProcedimentoResponse(p.getId(), modelMapper.map(p.getEspecialidade(), EspecialidadeResponse.class),
                 p.getCodigoTuss(), p.getNome(), p.getDescricao(), p.getDuracaoMinutos(), p.getValorBase(),
-                itens, p.calcularCustoInsumos(), p.getDataCriacao(), p.getDataModificacao());
+                itens, p.calcularCustoInsumos(), p.getUuid(), p.isAtivo(), p.getCriadoPor(), p.getAtualizadoPor(),
+                p.getDataCriacao(), p.getDataModificacao());
     }
 }
