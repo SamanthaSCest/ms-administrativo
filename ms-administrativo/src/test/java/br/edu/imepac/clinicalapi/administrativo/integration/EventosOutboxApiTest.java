@@ -119,7 +119,7 @@ class EventosOutboxApiTest {
         long esp = criar("/especialidades", "{\"nome\":\"Cardiologia\"}");
         long sala = criar("/salas", "{\"numero\":\"101\",\"tipo\":\"CONSULTORIO\"}");
         long medico = criar("/medicos", """
-                {"nome":"Dr. House","cpf":"12345678901","dataNascimento":"1980-01-01","crm":"1001","ufCrm":"MG",
+                {"nome":"Dr. House","cpf":"11145678920","dataNascimento":"1980-01-01","crm":"1001","ufCrm":"MG",
                  "especialidadeIds":[%d],"senha":"senhaForte1"}
                 """.formatted(esp));
 
