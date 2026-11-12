@@ -4,11 +4,14 @@ import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteContato;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.SituacaoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
+import br.edu.imepac.clinicalapi.administrativo.mapper.ResumoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
-import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Leituras do paciente para outros microserviços (somente leitura).
@@ -18,16 +21,26 @@ import org.springframework.transaction.annotation.Transactional;
 public class PacienteIntegracaoService {
 
     private final PacienteRepository repository;
+    private final ResumoMapper resumoMapper;
 
-    public PacienteIntegracaoService(PacienteRepository repository) {
+    public PacienteIntegracaoService(PacienteRepository repository, ResumoMapper resumoMapper) {
         this.repository = repository;
+        this.resumoMapper = resumoMapper;
     }
 
     @Transactional(readOnly = true)
     public PacienteResumo buscarResumo(Long id) {
-        Paciente paciente = buscarEntidade(id);
-        return new PacienteResumo(paciente.getId(), paciente.getNome(),
-                CpfMascara.mascarar(paciente.getCpf()), paciente.getDataNascimento());
+        return resumoMapper.paciente(buscarEntidade(id));
+    }
+
+    /** Busca em lote (RF22): ids inexistentes são ignorados; a lista vem ordenada por id. */
+    @Transactional(readOnly = true)
+    public List<PacienteResumo> buscarLote(List<Long> ids) {
+        IntegracaoLimites.validarLote(ids);
+        return repository.findAllById(ids).stream()
+                .sorted(Comparator.comparing(Paciente::getId))
+                .map(resumoMapper::paciente)
+                .toList();
     }
 
     @Transactional(readOnly = true)

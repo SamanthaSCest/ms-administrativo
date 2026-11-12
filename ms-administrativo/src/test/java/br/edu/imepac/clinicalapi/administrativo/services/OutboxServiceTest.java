@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import br.edu.imepac.clinicalapi.administrativo.entities.OutboxEvento;
 import br.edu.imepac.clinicalapi.administrativo.repositories.OutboxRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +23,13 @@ class OutboxServiceTest {
     private OutboxService outboxService;
     @Autowired
     private OutboxRepository outboxRepository;
+
+    // Os outros testes de integração também geram eventos (cada CRUD publica); começa com a outbox vazia
+    // para o evento deste teste estar entre os 100 pendentes consultados
+    @BeforeEach
+    void limparOutbox() {
+        outboxRepository.deleteAll();
+    }
 
     @Test
     void devePersistirEnvelopeCompletoNaOutbox() {

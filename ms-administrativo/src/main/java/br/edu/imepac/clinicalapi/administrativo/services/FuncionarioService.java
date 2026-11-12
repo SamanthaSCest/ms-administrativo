@@ -29,6 +29,7 @@ public class FuncionarioService {
     private final FuncionarioRepository repository;
     private final FuncionarioMapper mapper;
     private final UsuarioService usuarioService;
+    private final EventoService eventos;
 
     @Transactional
     public FuncionarioResponse criar(FuncionarioRequest request) {
@@ -42,7 +43,9 @@ public class FuncionarioService {
         }
         Funcionario funcionario = mapper.toEntity(request);
         funcionario.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), perfil));
-        return mapper.toResponse(repository.save(funcionario));
+        Funcionario salvo = repository.save(funcionario);
+        eventos.criado(salvo);
+        return mapper.toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -66,16 +69,22 @@ public class FuncionarioService {
         if (repository.existsByMatriculaAndIdNot(request.getMatricula(), id)) {
             throw new ConflictException("Já existe funcionário com a matrícula: " + request.getMatricula());
         }
+        var antes = eventos.retrato(mapper.toResponse(funcionario));
         mapper.updateEntity(request, funcionario);
         usuarioService.sincronizar(funcionario, request.getSenha(), perfil);
-        return mapper.toResponse(repository.save(funcionario));
+        Funcionario salvo = repository.save(funcionario);
+        FuncionarioResponse depois = mapper.toResponse(salvo);
+        eventos.atualizado(salvo, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo funcionário {}", id);
-        // O usuário de acesso é removido em cascata (Pessoa.usuario: orphanRemoval)
-        repository.delete(buscarEntidade(id));
+        Funcionario funcionario = buscarEntidade(id);
+        eventos.removido(funcionario);
+        // O usuário de acesso é removido em cascata (usuario: orphanRemoval)
+        repository.delete(funcionario);
     }
 
     /** O nível de acesso vem do cargo: ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO. */

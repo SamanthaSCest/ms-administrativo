@@ -33,6 +33,7 @@ public class PacienteService {
     private final PacienteRepository repository;
     private final PacienteMapper mapper;
     private final ResponsavelLegalRepository responsavelRepository;
+    private final EventoService eventos;
 
     @Transactional
     public PacienteResponse criar(PacienteRequest request) {
@@ -44,7 +45,9 @@ public class PacienteService {
         }
         Paciente paciente = mapper.toEntity(request);
         definirResponsavel(paciente, request.getResponsavelId());
-        return mapper.toResponse(repository.save(paciente));
+        Paciente salvo = repository.save(paciente);
+        eventos.criado(salvo);
+        return mapper.toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -64,15 +67,21 @@ public class PacienteService {
         if (repository.existsByCpfAndIdNot(request.getCpf(), id)) {
             throw new ConflictException("Já existe paciente com o CPF informado");
         }
+        var antes = eventos.retrato(mapper.toResponse(paciente));
         mapper.updateEntity(request, paciente);
         definirResponsavel(paciente, request.getResponsavelId());
-        return mapper.toResponse(repository.save(paciente));
+        Paciente salvo = repository.save(paciente);
+        PacienteResponse depois = mapper.toResponse(salvo);
+        eventos.atualizado(salvo, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo paciente {}", id);
-        repository.delete(buscarEntidade(id));
+        Paciente paciente = buscarEntidade(id);
+        eventos.removido(paciente);
+        repository.delete(paciente);
     }
 
     private Paciente buscarEntidade(Long id) {

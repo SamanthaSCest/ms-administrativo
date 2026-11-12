@@ -38,6 +38,7 @@ public class MedicoService {
     private final EspecialidadeRepository especialidadeRepository;
     private final MedicoMapper mapper;
     private final UsuarioService usuarioService;
+    private final EventoService eventos;
 
     @Transactional
     public MedicoResponse criar(MedicoRequest request) {
@@ -56,7 +57,9 @@ public class MedicoService {
         // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
         medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
         log.debug("Salvando médico {}", medico.getNome());
-        return mapper.toResponse(repository.save(medico));
+        Medico salvo = repository.save(medico);
+        eventos.criado(salvo);
+        return mapper.toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -79,17 +82,24 @@ public class MedicoService {
         if (repository.existsByCrmAndUfCrmAndIdNot(request.getCrm(), request.getUfCrm(), id)) {
             throw new ConflictException("Já existe médico com o CRM: " + request.getCrm() + "/" + request.getUfCrm());
         }
+        var antes = eventos.retrato(mapper.toResponse(medico));
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), medico.getEspecialidades()));
         usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
-        return mapper.toResponse(repository.save(medico));
+        Medico salvo = repository.save(medico);
+        MedicoResponse depois = mapper.toResponse(salvo);
+        eventos.atualizado(salvo, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo médico {}", id);
-        repository.delete(buscarEntidade(id));
+        Medico medico = buscarEntidade(id);
+        // Custos e disponibilidades saem junto (ON DELETE CASCADE); o evento medico.removido cobre os três
+        eventos.removido(medico);
+        repository.delete(medico);
     }
 
     /** Para outros services (custos, disponibilidade): médico do corpo inexistente ou inativo -> 422. */

@@ -4,6 +4,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteContato;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.SituacaoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
+import br.edu.imepac.clinicalapi.administrativo.mapper.ResumoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,7 @@ class PacienteIntegracaoServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PacienteIntegracaoService(repository);
+        service = new PacienteIntegracaoService(repository, new ResumoMapper());
     }
 
     private Paciente paciente() {

@@ -33,6 +33,7 @@ public class EspecialidadeService {
     private final EspecialidadeRepository repository;
     private final MedicoRepository medicoRepository;
     private final EspecialidadeMapper mapper;
+    private final EventoService eventos;
 
     // @Transactional: tudo no método acontece numa única transação (se lançar exceção, faz rollback).
     @Transactional
@@ -46,6 +47,7 @@ public class EspecialidadeService {
         // DTO -> entidade -> banco -> DTO de resposta
         Especialidade salva = repository.save(mapper.toEntity(request));
         log.info("Especialidade criada com id {}", salva.getId());
+        eventos.criado(salva);
         return mapper.toResponse(salva);
     }
 
@@ -68,8 +70,12 @@ public class EspecialidadeService {
         if (repository.existsByNomeIgnoreCaseAndIdNot(request.getNome(), id)) {
             throw new ConflictException("Já existe especialidade com o nome: " + request.getNome());
         }
+        var antes = eventos.retrato(mapper.toResponse(entidade));
         mapper.updateEntity(request, entidade);
-        return mapper.toResponse(repository.save(entidade));
+        Especialidade salva = repository.save(entidade);
+        EspecialidadeResponse depois = mapper.toResponse(salva);
+        eventos.atualizado(salva, antes, depois);
+        return depois;
     }
 
     @Transactional
@@ -81,6 +87,7 @@ public class EspecialidadeService {
             log.warn("Especialidade {} possui médicos vinculados", id);
             throw new ConflictException("Especialidade possui médicos vinculados e não pode ser removida");
         }
+        eventos.removido(entidade);
         repository.delete(entidade);
     }
 

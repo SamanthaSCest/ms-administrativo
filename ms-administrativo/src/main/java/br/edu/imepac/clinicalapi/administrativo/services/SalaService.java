@@ -27,6 +27,7 @@ public class SalaService {
     private final SalaRepository repository;
     private final DisponibilidadeMedicaRepository disponibilidadeRepository;
     private final ModelMapper modelMapper;
+    private final EventoService eventos;
 
     @Transactional
     public SalaResponse criar(SalaRequest request) {
@@ -34,7 +35,9 @@ public class SalaService {
         if (repository.existsByNumeroIgnoreCase(request.getNumero())) {
             throw new ConflictException("Já existe sala com o número: " + request.getNumero());
         }
-        return toResponse(repository.save(modelMapper.map(request, Sala.class)));
+        Sala salvo = repository.save(modelMapper.map(request, Sala.class));
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -54,8 +57,11 @@ public class SalaService {
         if (repository.existsByNumeroIgnoreCaseAndIdNot(request.getNumero(), id)) {
             throw new ConflictException("Já existe sala com o número: " + request.getNumero());
         }
+        var antes = eventos.retrato(toResponse(sala));
         modelMapper.map(request, sala);
-        return toResponse(repository.save(sala));
+        var depois = toResponse(repository.save(sala));
+        eventos.atualizado(sala, antes, depois);
+        return depois;
     }
 
     @Transactional
@@ -65,6 +71,7 @@ public class SalaService {
         if (disponibilidadeRepository.existsBySalaId(id)) {
             throw new ConflictException("Sala possui disponibilidades médicas e não pode ser removida");
         }
+        eventos.removido(sala);
         repository.delete(sala);
     }
 

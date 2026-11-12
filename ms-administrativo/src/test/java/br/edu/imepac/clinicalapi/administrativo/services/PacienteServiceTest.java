@@ -31,6 +31,9 @@ import static org.mockito.Mockito.when;
 class PacienteServiceTest {
 
     @Mock
+    private EventoService eventos;
+
+    @Mock
     private PacienteRepository repository;
     @Mock
     private ResponsavelLegalRepository responsavelRepository;
@@ -40,7 +43,7 @@ class PacienteServiceTest {
     @BeforeEach
     void setUp() {
         service = new PacienteService(repository, new PacienteMapper(new ModelMapperConfig().modelMapper()),
-                responsavelRepository);
+                responsavelRepository, eventos);
     }
 
     @Test

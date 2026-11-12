@@ -44,6 +44,7 @@ public class ProcedimentoService {
     private final InsumoService insumoService;
     private final CustoMedicoRepository custoMedicoRepository;
     private final ModelMapper modelMapper;
+    private final EventoService eventos;
 
     @Transactional
     public ProcedimentoResponse criar(ProcedimentoRequest request) {
@@ -53,7 +54,9 @@ public class ProcedimentoService {
         }
         Procedimento procedimento = new Procedimento();
         preencher(procedimento, request);
-        return toResponse(repository.save(procedimento));
+        var salvo = repository.save(procedimento);
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -73,8 +76,11 @@ public class ProcedimentoService {
         if (repository.existsByCodigoTussIgnoreCaseAndIdNot(request.getCodigoTuss(), id)) {
             throw new ConflictException("Já existe procedimento com o código TUSS: " + request.getCodigoTuss());
         }
+        var antes = eventos.retrato(toResponse(procedimento));
         preencher(procedimento, request);
-        return toResponse(repository.save(procedimento));
+        var depois = toResponse(repository.save(procedimento));
+        eventos.atualizado(procedimento, antes, depois);
+        return depois;
     }
 
     @Transactional
@@ -85,6 +91,7 @@ public class ProcedimentoService {
             throw new ConflictException("Procedimento possui custos de médicos e não pode ser removido");
         }
         // Os insumos do procedimento são removidos em cascata (composição)
+        eventos.removido(procedimento);
         repository.delete(procedimento);
     }
 

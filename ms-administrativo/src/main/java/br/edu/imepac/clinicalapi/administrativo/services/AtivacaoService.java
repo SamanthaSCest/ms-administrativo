@@ -36,13 +36,15 @@ public class AtivacaoService {
 
     /** Nome do recurso na URL -> repositório. Os mesmos nomes do PATCH /{recurso}/{id}/status. */
     private final Map<String, JpaRepository<? extends EntidadeBase, Long>> repositorios;
+    private final EventoService eventos;
 
     public AtivacaoService(EspecialidadeRepository especialidades, MedicoRepository medicos,
                            PacienteRepository pacientes, FuncionarioRepository funcionarios,
                            ConvenioRepository convenios, SalaRepository salas,
                            ResponsavelLegalRepository responsaveis, InsumoRepository insumos,
                            ProcedimentoRepository procedimentos, CustoMedicoRepository custos,
-                           DisponibilidadeMedicaRepository disponibilidades) {
+                           DisponibilidadeMedicaRepository disponibilidades, EventoService eventos) {
+        this.eventos = eventos;
         this.repositorios = Map.ofEntries(
                 Map.entry("especialidades", especialidades),
                 Map.entry("medicos", medicos),
@@ -73,6 +75,7 @@ public class AtivacaoService {
             }
             pessoa.getUsuario().setAtivo(ativo);
         }
+        boolean mudou = entidade.isAtivo() != ativo;
         if (ativo) {
             entidade.reativar();
         } else {
@@ -81,6 +84,10 @@ public class AtivacaoService {
         log.info("{} {} {}", recurso, id, ativo ? "reativado" : "inativado");
         // saveAndFlush: grava agora para a resposta já trazer atualizadoPor/dataModificacao
         EntidadeBase salva = salvar(repositorio, entidade);
+        // Evento <agregado>.inativado/reativado só quando o status muda de fato (PATCH repetido não publica)
+        if (mudou) {
+            eventos.statusAlterado(salva);
+        }
         return new StatusResponse(recurso, salva.getId(), salva.getUuid(), salva.isAtivo(), salva.getAtualizadoPor(),
                 salva.getDataModificacao());
     }

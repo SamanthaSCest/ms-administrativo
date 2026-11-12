@@ -29,6 +29,9 @@ import static org.mockito.Mockito.when;
 class FuncionarioServiceTest {
 
     @Mock
+    private EventoService eventos;
+
+    @Mock
     private FuncionarioRepository repository;
     @Mock
     private UsuarioService usuarioService;
@@ -38,7 +41,7 @@ class FuncionarioServiceTest {
     @BeforeEach
     void setUp() {
         service = new FuncionarioService(repository, new FuncionarioMapper(new ModelMapperConfig().modelMapper()),
-                usuarioService);
+                usuarioService, eventos);
     }
 
     private FuncionarioRequest request() {

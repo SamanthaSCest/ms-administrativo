@@ -26,6 +26,7 @@ public class ResponsavelLegalService {
     private final ResponsavelLegalRepository repository;
     private final PacienteRepository pacienteRepository;
     private final ModelMapper modelMapper;
+    private final EventoService eventos;
 
     @Transactional
     public ResponsavelLegalResponse criar(ResponsavelLegalRequest request) {
@@ -33,7 +34,9 @@ public class ResponsavelLegalService {
         if (repository.existsByCpf(request.getCpf())) {
             throw new ConflictException("Já existe responsável legal com o CPF informado");
         }
-        return toResponse(repository.save(modelMapper.map(request, ResponsavelLegal.class)));
+        ResponsavelLegal salvo = repository.save(modelMapper.map(request, ResponsavelLegal.class));
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -53,8 +56,11 @@ public class ResponsavelLegalService {
         if (repository.existsByCpfAndIdNot(request.getCpf(), id)) {
             throw new ConflictException("Já existe responsável legal com o CPF informado");
         }
+        var antes = eventos.retrato(toResponse(responsavel));
         modelMapper.map(request, responsavel);
-        return toResponse(repository.save(responsavel));
+        var depois = toResponse(repository.save(responsavel));
+        eventos.atualizado(responsavel, antes, depois);
+        return depois;
     }
 
     @Transactional
@@ -64,6 +70,7 @@ public class ResponsavelLegalService {
         if (pacienteRepository.existsByResponsavelId(id)) {
             throw new ConflictException("Responsável legal possui pacientes vinculados e não pode ser removido");
         }
+        eventos.removido(responsavel);
         repository.delete(responsavel);
     }
 

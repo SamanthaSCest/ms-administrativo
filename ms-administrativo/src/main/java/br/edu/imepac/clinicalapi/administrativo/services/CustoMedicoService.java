@@ -42,6 +42,7 @@ public class CustoMedicoService {
     private final MedicoService medicoService;
     private final EspecialidadeRepository especialidadeRepository;
     private final ProcedimentoService procedimentoService;
+    private final EventoService eventos;
 
     @Transactional
     public CustoMedicoResponse criar(CustoMedicoRequest request) {
@@ -49,7 +50,9 @@ public class CustoMedicoService {
         CustoMedico custo = request.tipo() == TipoCustoMedico.CONSULTA
                 ? new CustoMedicoConsulta() : new CustoMedicoProcedimento();
         preencher(custo, request);
-        return toResponse(repository.save(custo));
+        var salvo = repository.save(custo);
+        eventos.criado(salvo);
+        return toResponse(salvo);
     }
 
     @Transactional(readOnly = true)
@@ -89,14 +92,19 @@ public class CustoMedicoService {
         if (custo.getTipo() != request.tipo()) {
             throw new BusinessRuleException("O tipo do custo não pode ser alterado; remova e cadastre outro");
         }
+        var antes = eventos.retrato(toResponse(custo));
         preencher(custo, request);
-        return toResponse(repository.save(custo));
+        var depois = toResponse(repository.save(custo));
+        eventos.atualizado(custo, antes, depois);
+        return depois;
     }
 
     @Transactional
     public void remover(Long id) {
         log.info("Removendo custo {}", id);
-        repository.delete(buscarEntidade(id));
+        var entidade = buscarEntidade(id);
+        eventos.removido(entidade);
+        repository.delete(entidade);
     }
 
     private CustoMedico buscarEntidade(Long id) {
