@@ -53,11 +53,11 @@ Além dos CRUDs de Especialidade, Médico e Paciente do modelo, este módulo tra
 
 | O quê | Onde | Para que serve |
 |---|---|---|
-| API de integração do paciente | `controllers/PacienteIntegracaoController`, `services/PacienteIntegracaoService`, `dto/integracao/` | Leituras para outros microserviços: `GET /integracao/pacientes/{id}` (CPF mascarado), `/situacao` (sempre 200, `existe` true/false) e `/contato` |
+| API de integração | `controllers/IntegracaoController`, `controllers/PacienteIntegracaoController`, `dto/integracao/` | Leituras para outros microserviços (ver seção "Integração e eventos") |
 | Máscara de CPF (LGPD) | `utils/CpfMascara` | `12345678909` → `***.456.789-**` |
 | Validadores de CPF e CNPJ | `validation/@Cpf`, `validation/@Cnpj` | Conferem os dígitos verificadores (prontos para usar nos DTOs) |
 | Endereço e UF | `entities/Endereco`, `entities/UF` | Objeto embutido de endereço, para Unidade e Paciente |
-| Outbox de eventos + RabbitMQ | `entities/OutboxEvento`, `services/OutboxService`, `services/PublicadorOutbox`, `config/RabbitMqEventosConfiguration`, `db/migration/V2__criar_outbox_evento.sql` | O serviço chama `outboxService.registrar(...)` dentro da transação; a cada 5 s o publicador envia os pendentes para a exchange `adm.events` (topic) |
+| Outbox de eventos + RabbitMQ | `entities/OutboxEvento`, `services/OutboxService`, `services/PublicadorOutbox`, `config/RabbitMqEventosConfiguration`, `db/migration/V2__criar_outbox_evento.sql` | Cada cadastro publica seus eventos pelo `services/EventoService`, na mesma transação; a cada 5 s o publicador envia os pendentes para a exchange `adm.events` (topic) |
 
 O RabbitMQ sobe junto no `docker compose` (painel em http://localhost:15672, usuário `clinical`/`clinical`).
 Nos testes o publicador fica desligado (`outbox.publicador.habilitado: false`).
@@ -122,7 +122,7 @@ Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUse
 | `Medico` | `medicos`, `medico_especialidades` | `/medicos` | `ufCrm`; **várias especialidades** (`especialidadeIds`); CRM único por UF |
 | `Funcionario` | `funcionarios` | `/funcionarios` | `cargo` (enum `Cargo`) define o perfil de acesso |
 | `Convenio` | `convenios` | `/convenios` | registro ANS e CNPJ únicos (CNPJ validado) |
-| `Sala` | `salas` | `/salas` | identificação única; não remove com disponibilidades |
+| `Sala` | `salas` | `/salas` | `numero` único, `tipo` (CONSULTORIO, CIRURGIA ou PROCEDIMENTO), `andar` e `observacoes`; não remove com disponibilidades |
 | `Insumo` | `insumos` | `/insumos`, `PATCH /insumos/{id}/custo` | código único; **ms-estoque pode escrever** (X-Api-Key) |
 | `Procedimento` + `InsumoProcedimento` | `procedimentos`, `insumos_procedimento` | `/procedimentos` | código TUSS único; insumos sem repetição; resposta traz `custoInsumos` |
 | `CustoMedico` → `CustoMedicoConsulta` / `CustoMedicoProcedimento` | `custos_medicos` (SINGLE_TABLE) | `/custos-medicos`, `/custos-medicos/vigente` | médico precisa atender a especialidade; vigências não se sobrepõem (409) |
@@ -151,3 +151,37 @@ Regras de inativação:
 - Quem pode inativar segue a regra de escrita de cada recurso (ex.: pacientes → ADMIN/FUNCIONARIO; médicos → ADMIN).
 
 Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do banco) para os registros existentes.
+
+## Integração e eventos
+
+Escopo do grupo: só o ms-administrativo (os demais microserviços são de outros grupos). Não há Unidade, e Plano de convênio fica com outro grupo.
+
+### API de integração (somente leitura, `X-Api-Key` ou ADMIN)
+
+| Rota | O que devolve |
+|---|---|
+| `GET /integracao/especialidades` | Especialidades ativas |
+| `GET /integracao/medicos/{id}` | `MedicoResumo` (sem CPF, com especialidades) |
+| `GET /integracao/medicos/{id}/situacao` | `{existe, ativo}`, sempre 200 |
+| `GET /integracao/medicos/{id}/atende?especialidadeId=` | `{atende}`: false se o médico não existe, está inativo ou não atende |
+| `GET /integracao/medicos?ids=1,2&especialidadeId=` | Lote (até 100 ids) e/ou médicos ativos da especialidade |
+| `GET /integracao/pacientes/{id}`, `/situacao`, `/contato` | Resumo (CPF mascarado), situação e contato do paciente |
+| `GET /integracao/pacientes?ids=1,2` | Pacientes em lote (até 100), CPF mascarado |
+| `GET /integracao/salas[?tipo=]`, `/integracao/salas/{id}` | Salas ativas (por tipo) e resumo da sala |
+| `GET /integracao/convenios`, `/integracao/convenios/{id}` | Convênios ativos e resumo do convênio |
+
+Outras leituras úteis para os outros grupos (também liberadas para `X-Api-Key`): `GET /disponibilidades/agenda?medicoId=&data=`, `GET /custos-medicos/vigente`, `GET /insumos` (o ms-estoque também escreve em `/insumos`).
+
+### Eventos publicados (exchange `adm.events`, tipo topic, routing key = tipo do evento)
+
+Cada cadastro publica, na mesma transação da alteração (`services/EventoService` → outbox → RabbitMQ):
+
+| Agregado | Tipos |
+|---|---|
+| especialidade, sala, disponibilidade | `.criada`, `.atualizada`, `.inativada`, `.reativada`, `.removida` |
+| paciente, medico, funcionario, convenio, responsavel-legal, insumo, procedimento, custo-medico | `.criado`, `.atualizado`, `.inativado`, `.reativado`, `.removido` |
+
+Envelope: `eventoId`, `tipo`, `versao`, `ocorridoEm`, `origem` (`ms-administrativo`), `agregadoId`, `camposAlterados` (nos `.atualizado`) e `dados` (o Resumo da entidade, o mesmo da API de integração, sem CPF completo).
+Um PUT que não muda nada e um PATCH de status repetido não publicam evento. Remover um médico apaga em cascata seus custos e disponibilidades; o evento `medico.removido` representa os três.
+
+Exemplo para assinar: fila ligada à exchange `adm.events` com routing key `paciente.*` (todos os eventos de paciente) ou `#` (todos).
