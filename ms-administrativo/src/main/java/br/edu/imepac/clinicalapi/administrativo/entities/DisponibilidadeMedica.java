@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.Entity;
@@ -26,7 +25,7 @@ import java.time.LocalTime;
 @Table(name = "disponibilidades_medicas")
 @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
 @DiscriminatorColumn(name = "tipo", length = 20)
-public abstract class DisponibilidadeMedica extends BaseEntity {
+public abstract class DisponibilidadeMedica extends EntidadeBase {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "medico_id", nullable = false)

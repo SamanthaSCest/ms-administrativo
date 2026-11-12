@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -17,7 +16,7 @@ import java.math.RoundingMode;
 @Setter
 @Entity
 @Table(name = "insumos_procedimento")
-public class InsumoProcedimento extends BaseEntity {
+public class InsumoProcedimento extends EntidadeBase {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "procedimento_id", nullable = false)

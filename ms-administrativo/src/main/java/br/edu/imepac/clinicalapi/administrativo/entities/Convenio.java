@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -12,7 +11,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "convenios")
-public class Convenio extends BaseEntity {
+public class Convenio extends EntidadeBase {
 
     @Column(nullable = false, length = 150)
     private String nome;

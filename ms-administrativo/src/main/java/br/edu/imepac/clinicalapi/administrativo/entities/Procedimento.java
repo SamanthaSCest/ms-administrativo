@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -24,7 +23,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "procedimentos")
-public class Procedimento extends BaseEntity {
+public class Procedimento extends EntidadeBase {
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "especialidade_id", nullable = false)

@@ -39,8 +39,10 @@ public class PacienteIntegracaoService {
     /** Responde sempre 200: id inexistente devolve existe = false (o chamador não trata como erro). */
     @Transactional(readOnly = true)
     public SituacaoResponse buscarSituacao(Long id) {
-        boolean existe = repository.existsById(id);
-        return new SituacaoResponse(existe, existe);
+        // ativo vem da EntidadeBase: paciente inativado continua existindo, mas com ativo = false
+        return repository.findById(id)
+                .map(p -> new SituacaoResponse(true, p.isAtivo()))
+                .orElse(new SituacaoResponse(false, false));
     }
 
     private Paciente buscarEntidade(Long id) {

@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
@@ -12,7 +11,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @MappedSuperclass
-public abstract class Pessoa extends BaseEntity {
+public abstract class Pessoa extends EntidadeBase {
 
     @Column(nullable = false, length = 150)
     private String nome;

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.time.LocalTime;
 
 /** diaSemana (DIARIA) ou data/disponivel/motivo (EXCECAO) vêm preenchidos conforme o tipo. */
@@ -21,6 +22,11 @@ public record DisponibilidadeResponse(
         LocalDate data,
         Boolean disponivel,
         String motivo,
+        /** EntidadeBase: identificador público, status e auditoria. */
+        UUID uuid,
+        boolean ativo,
+        String criadoPor,
+        String atualizadoPor,
         LocalDateTime dataCriacao,
         LocalDateTime dataModificacao) {
 }

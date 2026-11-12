@@ -1,6 +1,5 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -17,7 +16,7 @@ import java.math.BigDecimal;
 @Setter
 @Entity
 @Table(name = "insumos")
-public class Insumo extends BaseEntity {
+public class Insumo extends EntidadeBase {
 
     @Column(nullable = false, unique = true, length = 30)
     private String codigo;

@@ -68,10 +68,14 @@ public class SalaService {
         repository.delete(sala);
     }
 
-    /** Para outros services: sala informada no corpo que não existe -> 422. */
+    /** Para outros services: sala do corpo inexistente ou inativa -> 422. */
     @Transactional(readOnly = true)
     public Sala buscarReferencia(Long id) {
-        return repository.findById(id).orElseThrow(() -> new BusinessRuleException("Sala não encontrada: " + id));
+        Sala sala = repository.findById(id).orElseThrow(() -> new BusinessRuleException("Sala não encontrada: " + id));
+        if (!sala.isAtivo()) {
+            throw new BusinessRuleException("Sala inativa: " + sala.getIdentificacao());
+        }
+        return sala;
     }
 
     private Sala buscarEntidade(Long id) {
