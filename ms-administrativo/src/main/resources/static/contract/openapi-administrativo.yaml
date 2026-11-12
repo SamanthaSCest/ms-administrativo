@@ -19,7 +19,7 @@ info:
        o administrador inicial é configurado por `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local: `admin`/`admin12345`).
     2. Clique em **Authorize** e cole o `accessToken` em `bearerAuth` (sem o prefixo "Bearer").
     3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
-       perfil sem permissão: **403** (ambos no formato `ErrorResponse`).
+       perfil sem permissão: **403** (ambos no formato `ProblemDetail`).
 
     Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`): leitura em geral e, para o
     ms-estoque, também escrita em `/insumos`.
@@ -137,9 +137,9 @@ paths:
         '422':
           description: Senha atual incorreta
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ProblemDetail'
 
   /usuarios:
     get:
@@ -373,6 +373,7 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
+
   /especialidades/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -468,6 +469,7 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+
   /medicos/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -564,6 +566,7 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
+
   /pacientes/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -637,6 +640,7 @@ paths:
                 $ref: '#/components/schemas/PacienteResumo'
         '404':
           $ref: '#/components/responses/NotFound'
+
   /integracao/pacientes/{id}/situacao:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -655,6 +659,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Situacao'
+
   /integracao/pacientes/{id}/contato:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -1794,72 +1799,90 @@ components:
     BadRequest:
       description: Requisição inválida (validação de campos, JSON malformado, parâmetro inválido)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
     NotFound:
       description: Recurso não encontrado
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
     Conflict:
       description: Conflito (valor único duplicado ou recurso em uso)
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
     UnprocessableEntity:
       description: "Regra de negócio violada (ex.: especialidade informada não existe)"
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
     Unauthorized:
       description: Não autenticado (token ausente, inválido ou expirado) ou credenciais inválidas no login
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
     Forbidden:
       description: Autenticado, mas o perfil não tem permissão para esta operação
       content:
-        application/json:
+        application/problem+json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: '#/components/schemas/ProblemDetail'
 
   schemas:
-    ErrorResponse:
+    ProblemDetail:
       type: object
-      description: Formato padrão de erro (produzido pelo @RestControllerAdvice)
+      description: |
+        Formato de erro baseado em Problem Details (RFC 9457).
+        O campo campos é incluído quando há erros de validação.
       properties:
-        timestamp:
+        type:
           type: string
-          format: date-time
+          format: uri-reference
+          description: URI que identifica o tipo do problema.
+          example: about:blank
+        title:
+          type: string
+          description: Resumo legível do tipo de problema.
+          example: Dados inválidos
         status:
           type: integer
-          example: 404
-        error:
+          format: int32
+          description: Código HTTP do problema.
+          example: 400
+        detail:
           type: string
-          example: Not Found
-        message:
+          description: Explicação legível específica desta ocorrência.
+          example: Um ou mais campos são inválidos.
+        instance:
           type: string
-          example: "Médico não encontrado: 10"
-        path:
-          type: string
+          format: uri-reference
+          description: URI da ocorrência específica do problema.
           example: /medicos/10
-        details:
+        codigo:
+          type: string
+          description: Código de erro do catálogo do ms-administrativo.
+          example: ADM-GEN-400
+        campos:
           type: array
+          description: Lista de erros de validação, quando aplicável.
           items:
-            $ref: '#/components/schemas/FieldDetail'
-    FieldDetail:
+            $ref: '#/components/schemas/ProblemField'
+
+    ProblemField:
       type: object
       properties:
-        field:
+        campo:
           type: string
+          description: Nome do campo inválido.
           example: cpf
-        message:
+        mensagem:
           type: string
+          description: Motivo da falha de validação.
           example: deve conter 11 dígitos
 
     PageMetadata:
@@ -1887,6 +1910,7 @@ components:
           type: string
           maxLength: 255
           example: Doenças do coração
+
     EspecialidadeResponse:
       type: object
       properties:
@@ -1916,6 +1940,7 @@ components:
         dataModificacao:
           type: string
           format: date-time
+
     EspecialidadePage:
       type: object
       properties:
@@ -2014,6 +2039,7 @@ components:
         dataModificacao:
           type: string
           format: date-time
+
     MedicoPage:
       type: object
       properties:
@@ -2110,6 +2136,7 @@ components:
         dataModificacao:
           type: string
           format: date-time
+
     PacientePage:
       type: object
       properties:
@@ -2215,6 +2242,7 @@ components:
       properties:
         atende:
           type: boolean
+
     Situacao:
       type: object
       properties:
@@ -2222,6 +2250,7 @@ components:
           type: boolean
         ativo:
           type: boolean
+
     PacienteContato:
       type: object
       properties:
