@@ -96,7 +96,7 @@ class AdministrativoApiIntegrationTest {
         mockMvc.perform(get("/especialidades/{id}", id))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.path").value("/especialidades/" + id));
+                .andExpect(jsonPath("$.instance").value("/especialidades/" + id));
     }
 
     @Test
@@ -116,7 +116,7 @@ class AdministrativoApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("nome"));
+                .andExpect(jsonPath("$.campos[0].campo").value("nome"));
     }
 
     @Test
@@ -125,7 +125,7 @@ class AdministrativoApiIntegrationTest {
 
         MvcResult result = mockMvc.perform(post("/medicos")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "12345678901", "CRM-1")))
+                        .content(medicoJson(espId, "11145678920", "CRM-1")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.especialidades[0].nome").value("Cardiologia"))
                 .andReturn();
@@ -146,14 +146,14 @@ class AdministrativoApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "123", "CRM-1")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("cpf"));
+                .andExpect(jsonPath("$.campos[0].campo").value("cpf"));
     }
 
     @Test
     void medico_especialidadeInexistente_retorna422() throws Exception {
         mockMvc.perform(post("/medicos")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(9999, "12345678901", "CRM-1")))
+                        .content(medicoJson(9999, "11145678920", "CRM-1")))
                 .andExpect(status().isUnprocessableEntity());
     }
 
@@ -161,10 +161,10 @@ class AdministrativoApiIntegrationTest {
     void medico_crmDuplicado_retorna409() throws Exception {
         long espId = criarEspecialidade("Cardiologia");
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                .content(medicoJson(espId, "12345678901", "CRM-1"))).andExpect(status().isCreated());
+                .content(medicoJson(espId, "11145678920", "CRM-1"))).andExpect(status().isCreated());
 
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "10987654321", "CRM-1")))
+                        .content(medicoJson(espId, "22245678982", "CRM-1")))
                 .andExpect(status().isConflict());
     }
 
@@ -172,7 +172,7 @@ class AdministrativoApiIntegrationTest {
     void especialidade_comMedico_naoPodeSerRemovida() throws Exception {
         long espId = criarEspecialidade("Cardiologia");
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                .content(medicoJson(espId, "12345678901", "CRM-1"))).andExpect(status().isCreated());
+                .content(medicoJson(espId, "11145678920", "CRM-1"))).andExpect(status().isCreated());
 
         mockMvc.perform(delete("/especialidades/{id}", espId)).andExpect(status().isConflict());
     }

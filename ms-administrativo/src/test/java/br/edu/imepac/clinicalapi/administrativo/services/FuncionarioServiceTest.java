@@ -47,7 +47,7 @@ class FuncionarioServiceTest {
     private FuncionarioRequest request() {
         FuncionarioRequest r = new FuncionarioRequest();
         r.setNome("Ana Lima");
-        r.setCpf("11122233344");
+        r.setCpf("11122233396");
         r.setDataNascimento(LocalDate.of(1992, 3, 10));
         r.setMatricula("F-001");
         r.setCargo(Cargo.RECEPCIONISTA);
@@ -59,9 +59,9 @@ class FuncionarioServiceTest {
     @Test
     void criar_recepcionista_criaUsuarioFuncionario() {
         Usuario usuario = new Usuario();
-        usuario.setLogin("11122233344");
+        usuario.setLogin("11122233396");
         usuario.setPerfil(Perfil.FUNCIONARIO);
-        when(usuarioService.novoUsuario("11122233344", "funcSenha123", Perfil.FUNCIONARIO)).thenReturn(usuario);
+        when(usuarioService.novoUsuario("11122233396", "funcSenha123", Perfil.FUNCIONARIO)).thenReturn(usuario);
         when(repository.save(any(Funcionario.class))).thenAnswer(inv -> {
             Funcionario f = inv.getArgument(0);
             f.setId(7L);
@@ -84,12 +84,12 @@ class FuncionarioServiceTest {
 
         service.criar(r);
 
-        verify(usuarioService).novoUsuario("11122233344", "funcSenha123", Perfil.ADMIN);
+        verify(usuarioService).novoUsuario("11122233396", "funcSenha123", Perfil.ADMIN);
     }
 
     @Test
     void criar_matriculaDuplicada_deveLancarConflict() {
-        when(repository.existsByCpf("11122233344")).thenReturn(false);
+        when(repository.existsByCpf("11122233396")).thenReturn(false);
         when(repository.existsByMatricula("F-001")).thenReturn(true);
 
         assertThatThrownBy(() -> service.criar(request())).isInstanceOf(ConflictException.class);
