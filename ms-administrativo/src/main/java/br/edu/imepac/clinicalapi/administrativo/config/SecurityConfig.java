@@ -65,6 +65,9 @@ public class SecurityConfig {
                         // Pacientes: equipe gerencia; médico e serviços consultam
                         .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
                         .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
+                        // A busca é POST só para não pôr dado pessoal na URL (RNF08): é leitura
+                        .requestMatchers(HttpMethod.POST, "/pacientes/busca")
+                        .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
                         .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
                         // Custos dos médicos: equipe e serviços (ex.: faturamento) consultam; só o admin altera
                         .requestMatchers(HttpMethod.GET, "/custos-medicos/**").hasAnyRole("ADMIN", "FUNCIONARIO", "SERVICO")

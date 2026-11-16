@@ -529,8 +529,18 @@ paths:
     get:
       tags: [Pacientes]
       summary: Lista pacientes (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos** (RF03). O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo
+        só sai no `GET /pacientes/{id}`. Para filtrar por nome ou CPF use `POST /pacientes/busca`: dado pessoal
+        não vai na URL (RNF08).
       operationId: listarPacientes
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -566,6 +576,42 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /pacientes/busca:
+    post:
+      tags: [Pacientes]
+      summary: Busca pacientes por nome, CPF e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Quem pode chamar
+        segue a regra de leitura de pacientes (ADMIN, FUNCIONARIO, MEDICO ou serviço). Nome busca por parte, sem
+        diferenciar maiúsculas; CPF completo traz no máximo um paciente; sem `ativo`, só os ativos.
+        A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarPacientes
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteBuscaRequest'
+            example:
+              nome: maria
+              ativo: true
+      responses:
+        '200':
+          description: Página de pacientes (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacientePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
 
   /pacientes/{id}:
     parameters:
@@ -2057,6 +2103,24 @@ components:
             $ref: '#/components/schemas/MedicoResponse'
         page:
           $ref: '#/components/schemas/PageMetadata'
+
+    PacienteBuscaRequest:
+      type: object
+      description: Filtros da busca de pacientes; todos opcionais.
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: maria
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+          description: CPF completo, só dígitos
+          example: '12345678909'
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
 
     PacienteRequest:
       type: object

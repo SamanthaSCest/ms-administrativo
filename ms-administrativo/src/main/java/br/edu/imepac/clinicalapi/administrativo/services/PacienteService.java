@@ -2,12 +2,16 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import br.edu.imepac.clinicalapi.administrativo.dto.PacienteBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
 import br.edu.imepac.clinicalapi.administrativo.entities.ResponsavelLegal;
 import br.edu.imepac.clinicalapi.administrativo.mapper.PacienteMapper;
+import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteFiltros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
+import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
+import org.springframework.data.jpa.domain.Specification;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ResponsavelLegalRepository;
 import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
@@ -50,9 +54,35 @@ public class PacienteService {
         return mapper.toResponse(salvo);
     }
 
+    /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
     @Transactional(readOnly = true)
-    public Page<PacienteResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(mapper::toResponse);
+    public Page<PacienteResponse> listar(Boolean ativo, Pageable pageable) {
+        return pesquisar(new PacienteBuscaRequest(null, null, ativo), pageable);
+    }
+
+    /**
+     * Busca por nome (parte, sem diferenciar maiúsculas), CPF completo e situação (RF02, RF03).
+     * Listagens sempre devolvem o CPF mascarado (RN20); o CPF completo só sai no GET por id.
+     */
+    @Transactional(readOnly = true)
+    public Page<PacienteResponse> buscar(PacienteBuscaRequest filtro, Pageable pageable) {
+        return pesquisar(filtro, pageable);
+    }
+
+    private Page<PacienteResponse> pesquisar(PacienteBuscaRequest filtro, Pageable pageable) {
+        Specification<Paciente> spec = Specification.allOf(
+                PacienteFiltros.ativo(filtro.ativo()),
+                PacienteFiltros.nomeContem(filtro.nome()),
+                PacienteFiltros.cpfIgual(filtro.cpf()));
+        return repository.findAll(spec, pageable).map(mapper::toResponse).map(PacienteService::mascararCpf);
+    }
+
+    private static PacienteResponse mascararCpf(PacienteResponse response) {
+        response.setCpf(CpfMascara.mascarar(response.getCpf()));
+        if (response.getResponsavel() != null) {
+            response.getResponsavel().setCpf(CpfMascara.mascarar(response.getResponsavel().getCpf()));
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)
