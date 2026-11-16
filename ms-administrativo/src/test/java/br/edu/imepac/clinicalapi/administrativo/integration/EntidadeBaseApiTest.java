@@ -126,18 +126,18 @@ class EntidadeBaseApiTest {
 
         // Especialidade inativa não entra em vínculo novo
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson("12345678901", "1001", cardio)))
+                        .content(medicoJson("11145678920", "1001", cardio)))
                 .andExpect(status().isUnprocessableEntity());
 
         alterarStatus("especialidades", cardio, true).andExpect(jsonPath("$.ativo").value(true));
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson("12345678901", "1001", cardio)))
+                        .content(medicoJson("11145678920", "1001", cardio)))
                 .andExpect(status().isCreated());
     }
 
     @Test
     void medicoInativo_naoFazLogin_naoRecebeCusto_eAgendaFicaVazia() throws Exception {
-        long medico = id(criar("/medicos", medicoJson("12345678901", "1001", cardio)));
+        long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
         criar("/disponibilidades", """
                 {"tipo":"DIARIA","medicoId":%d,"diaSemana":"SEGUNDA","horaInicial":"08:00","horaFinal":"12:00"}
                 """.formatted(medico));
@@ -148,7 +148,7 @@ class EntidadeBaseApiTest {
         alterarStatus("medicos", medico, false).andExpect(status().isOk());
 
         mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"login\":\"12345678901\",\"senha\":\"medicoSenha1\"}"))
+                        .content("{\"login\":\"11145678920\",\"senha\":\"medicoSenha1\"}"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/custos-medicos").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -163,7 +163,7 @@ class EntidadeBaseApiTest {
         // Reativar devolve o login
         alterarStatus("medicos", medico, true).andExpect(status().isOk());
         mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"login\":\"12345678901\",\"senha\":\"medicoSenha1\"}"))
+                        .content("{\"login\":\"11145678920\",\"senha\":\"medicoSenha1\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -182,7 +182,7 @@ class EntidadeBaseApiTest {
     @Test
     void permissoes_seguemAsRegrasDeEscritaDeCadaRecurso() throws Exception {
         long paciente = id(criar("/pacientes", "{\"nome\":\"Ana\",\"cpf\":\"12345678909\",\"dataNascimento\":\"1990-01-01\"}"));
-        long medico = id(criar("/medicos", medicoJson("12345678901", "1001", cardio)));
+        long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
         var recepcao = user("recepcao").roles("FUNCIONARIO");
 
         // Funcionário gerencia pacientes, mas não médicos
@@ -198,11 +198,11 @@ class EntidadeBaseApiTest {
     @Test
     void adminNaoInativaOProprioCadastro_eRecursoDesconhecidoRetorna404() throws Exception {
         long funcionario = id(criar("/funcionarios", """
-                {"nome":"Chefe","cpf":"11122233344","dataNascimento":"1980-01-01","matricula":"F-1",
+                {"nome":"Chefe","cpf":"11122233396","dataNascimento":"1980-01-01","matricula":"F-1",
                  "cargo":"ADMINISTRADOR","dataAdmissao":"2024-01-01","senha":"senhaForte1"}
                 """));
 
-        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(user("11122233344").roles("ADMIN"))
+        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(user("11122233396").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ativo\":false}"))
                 .andExpect(status().isUnprocessableEntity());
 

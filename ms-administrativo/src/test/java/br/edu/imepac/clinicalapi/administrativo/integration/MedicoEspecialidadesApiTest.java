@@ -61,7 +61,7 @@ class MedicoEspecialidadesApiTest {
         long clinica = especialidade("Clínica Geral");
 
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medico("12345678901", "1234", "MG", "[" + cardio + "," + clinica + "]")))
+                        .content(medico("11145678920", "1234", "MG", "[" + cardio + "," + clinica + "]")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ufCrm").value("MG"))
                 .andExpect(jsonPath("$.especialidades", hasSize(2)))
@@ -72,20 +72,20 @@ class MedicoEspecialidadesApiTest {
     void mesmoCrmEmUfDiferente_permitido_mesmaUf_conflito() throws Exception {
         long cardio = especialidade("Cardiologia");
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                .content(medico("12345678901", "1234", "MG", "[" + cardio + "]"))).andExpect(status().isCreated());
+                .content(medico("11145678920", "1234", "MG", "[" + cardio + "]"))).andExpect(status().isCreated());
 
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                .content(medico("10987654321", "1234", "SP", "[" + cardio + "]"))).andExpect(status().isCreated());
+                .content(medico("22245678982", "1234", "SP", "[" + cardio + "]"))).andExpect(status().isCreated());
 
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medico("11111111122", "1234", "MG", "[" + cardio + "]")))
+                        .content(medico("11111111200", "1234", "MG", "[" + cardio + "]")))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void semEspecialidades_retorna400() throws Exception {
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
-                        .content(medico("12345678901", "1234", "MG", "[]")))
+                        .content(medico("11145678920", "1234", "MG", "[]")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details[0].field").value("especialidadeIds"));
     }

@@ -186,18 +186,18 @@ class AuthApiIntegrationTest {
         MvcResult result = mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(funcionarioJson("11122233344", "F-001", null)))
+                        .content(funcionarioJson("11122233396", "F-001", null)))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.matricula").value("F-001"))
                 .andExpect(jsonPath("$.cargo").value("RECEPCIONISTA"))
                 .andExpect(jsonPath("$.dataAdmissao").value("2024-02-01"))
-                .andExpect(jsonPath("$.usuario.login").value("11122233344"))
+                .andExpect(jsonPath("$.usuario.login").value("11122233396"))
                 .andExpect(jsonPath("$.usuario.perfil").value("FUNCIONARIO"))
                 .andReturn();
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
 
-        String funcionario = token("11122233344", "funcSenha123");
+        String funcionario = token("11122233396", "funcSenha123");
 
         // Funcionário gerencia pacientes...
         criarPaciente(funcionario, "98765432100");
@@ -212,13 +212,13 @@ class AuthApiIntegrationTest {
         // Remover o funcionário remove o usuário (login deixa de funcionar)
         mockMvc.perform(delete("/funcionarios/{id}", id).header(HttpHeaders.AUTHORIZATION, bearer(admin)))
                 .andExpect(status().isNoContent());
-        assertThat(usuarioRepository.existsByLogin("11122233344")).isFalse();
+        assertThat(usuarioRepository.existsByLogin("11122233396")).isFalse();
     }
 
     @Test
     void funcionario_semSenha_retorna400() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
-        String semSenha = funcionarioJson("11122233344", "F-001", null).replace(",\"senha\":\"funcSenha123\"", "");
+        String semSenha = funcionarioJson("11122233396", "F-001", null).replace(",\"senha\":\"funcSenha123\"", "");
 
         mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
@@ -235,7 +235,7 @@ class AuthApiIntegrationTest {
         mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(funcionarioJson("11122233344", "F-001", "MEDICO")))
+                        .content(funcionarioJson("11122233396", "F-001", "MEDICO")))
                 .andExpect(status().isBadRequest());
     }
 
@@ -245,11 +245,11 @@ class AuthApiIntegrationTest {
         mockMvc.perform(post("/funcionarios")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(funcionarioJson("55566677788", "F-002", "ADMINISTRADOR")))
+                        .content(funcionarioJson("55566677720", "F-002", "ADMINISTRADOR")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.usuario.perfil").value("ADMIN"));
 
-        String novoAdmin = token("55566677788", "funcSenha123");
+        String novoAdmin = token("55566677720", "funcSenha123");
         mockMvc.perform(get("/usuarios").header(HttpHeaders.AUTHORIZATION, bearer(novoAdmin)))
                 .andExpect(status().isOk());
     }
@@ -277,8 +277,8 @@ class AuthApiIntegrationTest {
     @Test
     void admin_desativaUsuario_eLoginPassaAFalhar() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
-        criarFuncionario(admin, "11122233344", "F-001");
-        long usuarioId = usuarioRepository.findByLogin("11122233344").orElseThrow().getId();
+        criarFuncionario(admin, "11122233396", "F-001");
+        long usuarioId = usuarioRepository.findByLogin("11122233396").orElseThrow().getId();
 
         mockMvc.perform(patch("/usuarios/{id}/status", usuarioId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
@@ -289,7 +289,7 @@ class AuthApiIntegrationTest {
 
         mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"login\":\"11122233344\",\"senha\":\"funcSenha123\"}"))
+                        .content("{\"login\":\"11122233396\",\"senha\":\"funcSenha123\"}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -308,8 +308,8 @@ class AuthApiIntegrationTest {
     @Test
     void alterarSenha_doProprioUsuario() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
-        criarFuncionario(admin, "11122233344", "F-001");
-        String funcionario = token("11122233344", "funcSenha123");
+        criarFuncionario(admin, "11122233396", "F-001");
+        String funcionario = token("11122233396", "funcSenha123");
 
         mockMvc.perform(put("/auth/senha")
                         .header(HttpHeaders.AUTHORIZATION, bearer(funcionario))
@@ -323,7 +323,7 @@ class AuthApiIntegrationTest {
                         .content("{\"senhaAtual\":\"funcSenha123\",\"novaSenha\":\"novaSenha123\"}"))
                 .andExpect(status().isNoContent());
 
-        token("11122233344", "novaSenha123");
+        token("11122233396", "novaSenha123");
     }
 
     @Test
@@ -334,11 +334,11 @@ class AuthApiIntegrationTest {
         mockMvc.perform(post("/medicos")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "12345678901")))
+                        .content(medicoJson(espId, "11145678920")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.usuario.perfil").value("MEDICO"));
 
-        String medico = token("12345678901", "medicoSenha1");
+        String medico = token("11145678920", "medicoSenha1");
         // Médico consulta pacientes, mas não cadastra
         mockMvc.perform(get("/pacientes").header(HttpHeaders.AUTHORIZATION, bearer(medico)))
                 .andExpect(status().isOk());
@@ -350,23 +350,23 @@ class AuthApiIntegrationTest {
     @Test
     void funcionarioPodeTerOMesmoCpfDeUmPaciente() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
-        criarPaciente(admin, "11122233344");
+        criarPaciente(admin, "11122233396");
 
         // Paciente não ocupa login, então a funcionária que também é paciente pode ser cadastrada
-        criarFuncionario(admin, "11122233344", "F-001");
+        criarFuncionario(admin, "11122233396", "F-001");
     }
 
     @Test
     void cpfJaUsadoComoLogin_retorna409() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
-        criarFuncionario(admin, "11122233344", "F-001");
+        criarFuncionario(admin, "11122233396", "F-001");
         long espId = criarEspecialidade(admin);
 
         // Mesmo CPF já é login de um funcionário
         mockMvc.perform(post("/medicos")
                         .header(HttpHeaders.AUTHORIZATION, bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(medicoJson(espId, "11122233344")))
+                        .content(medicoJson(espId, "11122233396")))
                 .andExpect(status().isConflict());
     }
 
