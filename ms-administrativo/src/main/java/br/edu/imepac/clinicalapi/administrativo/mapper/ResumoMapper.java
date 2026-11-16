@@ -45,17 +45,17 @@ public class ResumoMapper {
 
     public Agregado agregado(EntidadeBase e) {
         return switch (e) {
-            case Especialidade x -> new Agregado("especialidade", true);
-            case Medico x -> new Agregado("medico", false);
-            case Paciente x -> new Agregado("paciente", false);
-            case Funcionario x -> new Agregado("funcionario", false);
-            case Convenio x -> new Agregado("convenio", false);
-            case Sala x -> new Agregado("sala", true);
-            case ResponsavelLegal x -> new Agregado("responsavel-legal", false);
-            case Insumo x -> new Agregado("insumo", false);
-            case Procedimento x -> new Agregado("procedimento", false);
-            case CustoMedico x -> new Agregado("custo-medico", false);
-            case DisponibilidadeMedica x -> new Agregado("disponibilidade", true);
+            case Especialidade _ -> new Agregado("especialidade", true);
+            case Medico _ -> new Agregado("medico", false);
+            case Paciente _ -> new Agregado("paciente", false);
+            case Funcionario _ -> new Agregado("funcionario", false);
+            case Convenio _ -> new Agregado("convenio", false);
+            case Sala _ -> new Agregado("sala", true);
+            case ResponsavelLegal _ -> new Agregado("responsavel-legal", false);
+            case Insumo _ -> new Agregado("insumo", false);
+            case Procedimento _ -> new Agregado("procedimento", false);
+            case CustoMedico _ -> new Agregado("custo-medico", false);
+            case DisponibilidadeMedica _ -> new Agregado("disponibilidade", true);
             default -> throw new IllegalArgumentException("Entidade sem evento: " + e.getClass().getSimpleName());
         };
     }
