@@ -136,6 +136,34 @@ class EntidadeBaseApiTest {
     }
 
     @Test
+    void rn11_inativarEspecialidadeComMedicoAtivo_retorna422ComQuantidade() throws Exception {
+        long medico1 = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        id(criar("/medicos", medicoJson("22245678982", "1002", cardio)));
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.codigo").value("ADM-ESP-002"))
+                .andExpect(jsonPath("$.medicosVinculados").value(2));
+        mockMvc.perform(get("/especialidades/{id}", cardio)).andExpect(jsonPath("$.ativo").value(true));
+
+        // Médico inativo não conta
+        alterarStatus("medicos", medico1, false).andExpect(status().isOk());
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.medicosVinculados").value(1));
+    }
+
+    @Test
+    void rn11_especialidadeSoComMedicosInativos_podeSerInativada() throws Exception {
+        long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        alterarStatus("medicos", medico, false).andExpect(status().isOk());
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativo").value(false));
+    }
+
+    @Test
     void medicoInativo_naoFazLogin_naoRecebeCusto_eAgendaFicaVazia() throws Exception {
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
         criar("/disponibilidades", """

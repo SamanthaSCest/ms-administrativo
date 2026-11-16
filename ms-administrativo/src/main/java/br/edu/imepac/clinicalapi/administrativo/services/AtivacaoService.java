@@ -2,6 +2,9 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import br.edu.imepac.clinicalapi.administrativo.dto.StatusResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.EntidadeBase;
+import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
+import br.edu.imepac.clinicalapi.administrativo.exceptions.NegocioException;
+import org.springframework.http.HttpStatus;
 import br.edu.imepac.clinicalapi.administrativo.entities.PossuiUsuario;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ConvenioRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.CustoMedicoRepository;
@@ -37,6 +40,7 @@ public class AtivacaoService {
     /** Nome do recurso na URL -> repositório. Os mesmos nomes do PATCH /{recurso}/{id}/status. */
     private final Map<String, JpaRepository<? extends EntidadeBase, Long>> repositorios;
     private final EventoService eventos;
+    private final MedicoRepository medicos;
 
     public AtivacaoService(EspecialidadeRepository especialidades, MedicoRepository medicos,
                            PacienteRepository pacientes, FuncionarioRepository funcionarios,
@@ -45,6 +49,7 @@ public class AtivacaoService {
                            ProcedimentoRepository procedimentos, CustoMedicoRepository custos,
                            DisponibilidadeMedicaRepository disponibilidades, EventoService eventos) {
         this.eventos = eventos;
+        this.medicos = medicos;
         this.repositorios = Map.ofEntries(
                 Map.entry("especialidades", especialidades),
                 Map.entry("medicos", medicos),
@@ -76,6 +81,9 @@ public class AtivacaoService {
             pessoa.getUsuario().setAtivo(ativo);
         }
         boolean mudou = entidade.isAtivo() != ativo;
+        if (mudou && !ativo && entidade instanceof Especialidade) {
+            validarEspecialidadeSemMedicoAtivo(id);
+        }
         if (ativo) {
             entidade.reativar();
         } else {
@@ -90,6 +98,17 @@ public class AtivacaoService {
         }
         return new StatusResponse(recurso, salva.getId(), salva.getUuid(), salva.isAtivo(), salva.getAtualizadoPor(),
                 salva.getDataModificacao());
+    }
+
+    /** RN11: especialidade com médico ativo não pode ser inativada (ADM-ESP-002, 422). */
+    private void validarEspecialidadeSemMedicoAtivo(Long especialidadeId) {
+        long medicosAtivos = medicos.countByEspecialidadesIdAndAtivoTrue(especialidadeId);
+        if (medicosAtivos > 0) {
+            log.warn("Especialidade {} tem {} médico(s) ativo(s)", especialidadeId, medicosAtivos);
+            throw new NegocioException(HttpStatus.UNPROCESSABLE_ENTITY, "ADM-ESP-002",
+                    "Especialidade possui " + medicosAtivos + " médico(s) ativo(s) vinculado(s) e não pode ser inativada",
+                    Map.of("medicosVinculados", medicosAtivos));
+        }
     }
 
     @SuppressWarnings("unchecked")

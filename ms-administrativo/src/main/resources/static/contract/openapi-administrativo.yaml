@@ -1707,7 +1707,8 @@ paths:
       description: |
         Inativar **não apaga**: o registro continua consultável, mas não pode entrar em vínculos novos (422) e
         custos/disponibilidades inativos são ignorados. Inativar médico ou funcionário também bloqueia o login;
-        ninguém pode inativar o próprio cadastro (422). Quem pode chamar segue a regra de **escrita** do recurso
+        ninguém pode inativar o próprio cadastro (422). Especialidade com médico **ativo** vinculado não pode ser
+        inativada (RN11): 422 com `codigo: ADM-ESP-002` e `medicosVinculados` (quantidade). Quem pode chamar segue a regra de **escrita** do recurso
         (ex.: pacientes → ADMIN ou FUNCIONARIO; médicos → ADMIN; insumos → ADMIN ou ms-estoque).
         Usuários têm o endpoint próprio `PATCH /usuarios/{id}/status`.
       operationId: alterarStatusCadastro

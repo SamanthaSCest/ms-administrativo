@@ -22,6 +22,9 @@ public interface MedicoRepository extends JpaRepository<Medico, Long> {
     /** Algum médico atende a especialidade? (navega pela coleção especialidades) */
     boolean existsByEspecialidadesId(Long especialidadeId);
 
+    /** RN11: quantos médicos ativos ainda atendem a especialidade. */
+    long countByEspecialidadesIdAndAtivoTrue(Long especialidadeId);
+
     /** Integração: médicos ativos que atendem a especialidade. */
     List<Medico> findByEspecialidadesIdAndAtivoTrueOrderByNomeAsc(Long especialidadeId);
 }
