@@ -96,7 +96,7 @@ class AdministrativoApiIntegrationTest {
         mockMvc.perform(get("/especialidades/{id}", id))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.path").value("/especialidades/" + id));
+                .andExpect(jsonPath("$.instance").value("/especialidades/" + id));
     }
 
     @Test
@@ -116,7 +116,7 @@ class AdministrativoApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"nome\":\"\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("nome"));
+                .andExpect(jsonPath("$.campos[0].campo").value("nome"));
     }
 
     @Test
@@ -146,7 +146,7 @@ class AdministrativoApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "123", "CRM-1")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("cpf"));
+                .andExpect(jsonPath("$.campos[0].campo").value("cpf"));
     }
 
     @Test

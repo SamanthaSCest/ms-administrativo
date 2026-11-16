@@ -87,6 +87,6 @@ class MedicoEspecialidadesApiTest {
         mockMvc.perform(post("/medicos").contentType(MediaType.APPLICATION_JSON)
                         .content(medico("11145678920", "1234", "MG", "[]")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("especialidadeIds"));
+                .andExpect(jsonPath("$.campos[0].campo").value("especialidadeIds"));
     }
 }

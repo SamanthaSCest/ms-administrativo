@@ -80,7 +80,7 @@ class CadastrosApoioApiTest {
         mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
                         .content(convenioJson("123456", "11222333000100")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details[0].field").value("cnpj"));
+                .andExpect(jsonPath("$.campos[0].campo").value("cnpj"));
     }
 
     @Test
