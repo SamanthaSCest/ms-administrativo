@@ -152,6 +152,13 @@ Regras de inativação:
 
 Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do banco) para os registros existentes.
 
+## Pacientes: busca, LGPD e convênios
+
+- `GET /pacientes[?ativo=]` sem `ativo` traz só os ativos. Filtro por nome e CPF fica em `POST /pacientes/busca` (corpo `{nome, cpf, ativo}`), para não pôr dado pessoal na URL (RNF08). As listagens devolvem o CPF mascarado; o CPF completo só sai no `GET /pacientes/{id}`.
+- Consentimento LGPD (RF26): `consentimentoLgpd` + `versaoTermoLgpd` (obrigatória quando há consentimento). O servidor registra `dataConsentimentoLgpd`, que só muda quando a versão do termo muda; retirar o consentimento limpa os dois.
+- Vínculo com convênio (RF06, HU04) em `/pacientes/{id}/convenios`, direto com o convênio (o plano é de outro grupo). Regras: convênio ativo (`ADM-PCV-001`), um vínculo ativo por convênio (`ADM-PCV-002`, 409), carteirinha não vencida (`ADM-PCV-003`), paciente ativo (`ADM-PCV-004`) e vínculo desvinculado não muda mais (`ADM-PCV-005`). `DELETE` desvincula (inativa) e mantém o histórico. Inativar o convênio não mexe no vínculo, mas ele deixa de ser vigente (RN16).
+- Especialidade com médico ativo não pode ser inativada (RN11): 422 `ADM-ESP-002` com `medicosVinculados`.
+
 ## Integração e eventos
 
 Escopo do grupo: só o ms-administrativo (os demais microserviços são de outros grupos). Não há Unidade, e Plano de convênio fica com outro grupo.
@@ -167,6 +174,7 @@ Escopo do grupo: só o ms-administrativo (os demais microserviços são de outro
 | `GET /integracao/medicos?ids=1,2&especialidadeId=` | Lote (até 100 ids) e/ou médicos ativos da especialidade |
 | `GET /integracao/pacientes/{id}`, `/situacao`, `/contato` | Resumo (CPF mascarado), situação e contato do paciente |
 | `GET /integracao/pacientes?ids=1,2` | Pacientes em lote (até 100), CPF mascarado |
+| `GET /integracao/pacientes/{id}/convenios/vigentes[?data=]` | Vínculos vigentes na data (hoje, se omitida): vínculo ativo, convênio ativo e carteirinha válida |
 | `GET /integracao/salas[?tipo=]`, `/integracao/salas/{id}` | Salas ativas (por tipo) e resumo da sala |
 | `GET /integracao/convenios`, `/integracao/convenios/{id}` | Convênios ativos e resumo do convênio |
 
@@ -180,6 +188,7 @@ Cada cadastro publica, na mesma transação da alteração (`services/EventoServ
 |---|---|
 | especialidade, sala, disponibilidade | `.criada`, `.atualizada`, `.inativada`, `.reativada`, `.removida` |
 | paciente, medico, funcionario, convenio, responsavel-legal, insumo, procedimento, custo-medico | `.criado`, `.atualizado`, `.inativado`, `.reativado`, `.removido` |
+| vínculo paciente–convênio (agregadoId = id do paciente) | `paciente.convenio-vinculado`, `paciente.convenio-atualizado`, `paciente.convenio-desvinculado` |
 
 Envelope: `eventoId`, `tipo`, `versao`, `ocorridoEm`, `origem` (`ms-administrativo`), `agregadoId`, `camposAlterados` (nos `.atualizado`) e `dados` (o Resumo da entidade, o mesmo da API de integração, sem CPF completo).
 Um PUT que não muda nada e um PATCH de status repetido não publicam evento. Remover um médico apaga em cascata seus custos e disponibilidades; o evento `medico.removido` representa os três.

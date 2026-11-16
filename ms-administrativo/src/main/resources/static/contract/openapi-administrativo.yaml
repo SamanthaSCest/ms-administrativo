@@ -725,6 +725,39 @@ paths:
                 $ref: '#/components/schemas/PacienteContato'
         '404':
           $ref: '#/components/responses/NotFound'
+  /integracao/pacientes/{id}/convenios/vigentes:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Convênios vigentes do paciente na data (RF24)
+      description: |
+        Vigente = vínculo ativo, convênio ativo e carteirinha válida na data (RN16). Convênio inativado não apaga
+        o vínculo, mas ele some desta lista. Sem `data`, usa hoje. Paciente inexistente: 404.
+      operationId: integracaoConveniosVigentesPaciente
+      security:
+        - apiKey: []
+        - bearerAuth: []
+      parameters:
+        - name: data
+          in: query
+          required: false
+          description: Data de referência (yyyy-MM-dd); omitida = hoje
+          schema:
+            type: string
+            format: date
+          example: '2026-12-01'
+      responses:
+        '200':
+          description: Vínculos vigentes (pode ser vazia)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PacienteConvenioResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /integracao/pacientes:
     get:
       tags: [Integração]
@@ -942,6 +975,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConvenioResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /pacientes/{pacienteId}/convenios:
+    parameters:
+      - $ref: '#/components/parameters/PacienteId'
+    get:
+      tags: [Pacientes]
+      summary: Lista os vínculos do paciente com convênios (RF06)
+      description: Inclui os desvinculados (histórico), depois dos ativos. `vigente` é calculado para hoje.
+      operationId: listarConveniosPaciente
+      responses:
+        '200':
+          description: Vínculos do paciente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PacienteConvenioResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Pacientes]
+      summary: Vincula o paciente a um convênio (HU04)
+      description: |
+        O plano fica com outro grupo: o vínculo é direto com o convênio. Regras:
+        convênio ativo (RN06, 422 `ADM-PCV-001`); um vínculo **ativo** por convênio (RN05, 409 `ADM-PCV-002`);
+        carteirinha não vencida (RN07, 422 `ADM-PCV-003`); paciente ativo (422 `ADM-PCV-004`).
+        Publica `paciente.convenio-vinculado`.
+      operationId: vincularConvenioPaciente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteConvenioRequest'
+      responses:
+        '201':
+          description: Vinculado. Header `Location` aponta para o vínculo.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /pacientes/{pacienteId}/convenios/{vinculoId}:
+    parameters:
+      - $ref: '#/components/parameters/PacienteId'
+      - name: vinculoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags: [Pacientes]
+      summary: Busca um vínculo do paciente
+      operationId: buscarConvenioPaciente
+      responses:
+        '200':
+          description: Vínculo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Pacientes]
+      summary: Substitui convênio, carteirinha e validade do vínculo
+      description: |
+        Mesmas regras do cadastro. Vínculo desvinculado não muda mais (422 `ADM-PCV-005`): crie um novo.
+        Publica `paciente.convenio-atualizado` com `camposAlterados` (nada muda = nenhum evento).
+      operationId: atualizarConvenioPaciente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteConvenioRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Pacientes]
+      summary: Desvincula (inativa) o vínculo
+      description: |
+        Não apaga: o vínculo fica no histórico com `ativo = false` e deixa de ser vigente.
+        Publica `paciente.convenio-desvinculado` (repetir não publica de novo).
+      operationId: desvincularConvenioPaciente
+      responses:
+        '204':
+          description: Desvinculado
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -1812,6 +1962,13 @@ components:
       style: form
       explode: false
       example: [1, 2, 3]
+    PacienteId:
+      name: pacienteId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
     Id:
       name: id
       in: path
@@ -2327,6 +2484,82 @@ components:
           type: string
         cnpj:
           type: string
+        ativo:
+          type: boolean
+    PacienteConvenioRequest:
+      type: object
+      required: [convenioId, numeroCarteirinha]
+      properties:
+        convenioId:
+          type: integer
+          format: int64
+          description: Convênio **ativo** (RN06, senão 422 ADM-PCV-001)
+        numeroCarteirinha:
+          type: string
+          maxLength: 30
+          example: '0001234567'
+        validade:
+          type: string
+          format: date
+          nullable: true
+          description: Validade da carteirinha; opcional, mas não pode estar vencida (RN07, senão 422 ADM-PCV-003)
+    PacienteConvenioResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        pacienteId:
+          type: integer
+          format: int64
+        convenio:
+          $ref: '#/components/schemas/ConvenioResumo'
+        numeroCarteirinha:
+          type: string
+        validade:
+          type: string
+          format: date
+          nullable: true
+        ativo:
+          type: boolean
+          description: false = desvinculado (fica no histórico)
+        vigente:
+          type: boolean
+          description: Vigente hoje = vínculo ativo, convênio ativo e carteirinha válida (RN16)
+        criadoPor:
+          type: string
+        atualizadoPor:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    PacienteConvenioResumo:
+      type: object
+      description: Vínculo para a integração e o campo `dados` dos eventos `paciente.convenio-*`.
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        pacienteId:
+          type: integer
+          format: int64
+        convenio:
+          $ref: '#/components/schemas/ConvenioResumo'
+        numeroCarteirinha:
+          type: string
+        validade:
+          type: string
+          format: date
+          nullable: true
         ativo:
           type: boolean
     AtendeResponse:
