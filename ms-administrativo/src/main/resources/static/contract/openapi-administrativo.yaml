@@ -2158,6 +2158,16 @@ components:
           type: integer
           format: int64
           description: Responsável legal. **Obrigatório para menores de 18 anos** (senão 422).
+        consentimentoLgpd:
+          type: boolean
+          description: |
+            Consentimento LGPD (RF26). Omitido ou `false` = sem consentimento (retira o anterior).
+            A data do consentimento é registrada pelo servidor.
+        versaoTermoLgpd:
+          type: string
+          maxLength: 20
+          description: Versão do termo aceito. **Obrigatória quando `consentimentoLgpd` é true** (senão 400).
+          example: '1.0'
     PacienteResponse:
       type: object
       properties:
@@ -2202,6 +2212,16 @@ components:
           description: Calculada a partir da data de nascimento
         menorDeIdade:
           type: boolean
+        consentimentoLgpd:
+          type: boolean
+        versaoTermoLgpd:
+          type: string
+          nullable: true
+        dataConsentimentoLgpd:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando o paciente consentiu; muda só se a versão do termo mudar
         dataCriacao:
           type: string
           format: date-time

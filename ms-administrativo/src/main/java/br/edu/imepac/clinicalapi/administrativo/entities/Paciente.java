@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 
 /**
@@ -41,6 +42,35 @@ public class Paciente extends Pessoa {
     @ManyToOne
     @JoinColumn(name = "responsavel_id")
     private ResponsavelLegal responsavel;
+
+    // Consentimento LGPD (RF26). Quem consente informa a versão do termo; a data é registrada pelo servidor.
+    @Column(name = "consentimento_lgpd", nullable = false)
+    private boolean consentimentoLgpd;
+
+    @Column(name = "versao_termo_lgpd", length = 20)
+    private String versaoTermoLgpd;
+
+    @Column(name = "data_consentimento_lgpd")
+    private LocalDateTime dataConsentimentoLgpd;
+
+    /**
+     * Registra ou retira o consentimento. A data só muda quando o consentimento é dado agora
+     * ou quando o paciente aceita uma versão nova do termo.
+     */
+    public void definirConsentimentoLgpd(boolean consente, String versaoTermo, LocalDateTime agora) {
+        if (!consente) {
+            this.consentimentoLgpd = false;
+            this.versaoTermoLgpd = null;
+            this.dataConsentimentoLgpd = null;
+            return;
+        }
+        String versao = versaoTermo.trim();
+        if (!this.consentimentoLgpd || !versao.equals(this.versaoTermoLgpd)) {
+            this.dataConsentimentoLgpd = agora;
+        }
+        this.consentimentoLgpd = true;
+        this.versaoTermoLgpd = versao;
+    }
 
     public int calcularIdade() {
         return calcularIdade(LocalDate.now());

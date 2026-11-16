@@ -4,6 +4,8 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Sexo;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 /**
  * DTO de SAÍDA: o que a API devolve ao cliente (nunca a entidade JPA).
  */
@@ -18,4 +20,8 @@ public class PacienteResponse extends PessoaResponse {
     /** Calculados a partir da data de nascimento. */
     private int idade;
     private boolean menorDeIdade;
+    /** Consentimento LGPD (RF26); a data é registrada pelo servidor. */
+    private boolean consentimentoLgpd;
+    private String versaoTermoLgpd;
+    private LocalDateTime dataConsentimentoLgpd;
 }
