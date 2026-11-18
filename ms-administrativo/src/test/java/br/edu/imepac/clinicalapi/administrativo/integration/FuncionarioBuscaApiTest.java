@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.integration;
 
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,12 +41,18 @@ class FuncionarioBuscaApiTest {
     private long anabela;
     private long bruno;
 
+    // Os usuários criados têm o CPF como login: limpar evita conflito com outros testes
+    @AfterEach
+    void limpar() {
+        funcionarioRepository.deleteAll();
+    }
+
     @BeforeEach
     void preparar() throws Exception {
         funcionarioRepository.deleteAll();
-        ana = criar("Ana Lima", "12345678909", "F-101");
-        anabela = criar("Anabela Souza", "11145678920", "F-102");
-        bruno = criar("Bruno Alves", "22245678982", "F-103");
+        ana = criar("Ana Lima", "66645678908", "F-101");
+        anabela = criar("Anabela Souza", "77745678951", "F-102");
+        bruno = criar("Bruno Alves", "88845678903", "F-103");
         mockMvc.perform(patch("/funcionarios/{id}/status", anabela).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ativo\":false}")).andExpect(status().isOk());
     }
@@ -83,7 +90,7 @@ class FuncionarioBuscaApiTest {
 
     @Test
     void getPorId_continuaComCpfCompleto() throws Exception {
-        mockMvc.perform(get("/funcionarios/{id}", ana)).andExpect(jsonPath("$.cpf").value("12345678909"));
+        mockMvc.perform(get("/funcionarios/{id}", ana)).andExpect(jsonPath("$.cpf").value("66645678908"));
     }
 
     @Test
@@ -100,7 +107,7 @@ class FuncionarioBuscaApiTest {
 
     @Test
     void busca_porCpfCompleto_comCpfMascarado() throws Exception {
-        buscar("{\"cpf\":\"22245678982\"}")
+        buscar("{\"cpf\":\"88845678903\"}")
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].id").value(bruno))
                 .andExpect(jsonPath("$.content[0].cpf").value("***.456.789-**"));
