@@ -81,7 +81,7 @@ Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, data
 Keycloak (realm clinical): usuário (username = CPF, senha, enabled) ── grupos ── client roles (= enum Permissao)
 ```
 
-- Só a **equipe** acessa o sistema. Médicos e funcionários implementam `PossuiUsuario` e têm **um** usuário. O login é o **CPF**; a senha vai no próprio cadastro (`senha`, obrigatória no POST) e segue direto para o Keycloak, sem ser guardada aqui.
+- Só a **equipe** acessa o sistema. Médicos e funcionários implementam `PossuiUsuario` e têm **um** usuário. O login é o **CPF**; a senha vai no próprio cadastro (`senha`, obrigatória no POST) e segue direto para o Keycloak, sem ser guardada aqui. Política de senha do realm: de 8 a 72 caracteres e diferente do login (CPF); senha recusada pelo Keycloak volta como 422 com a mensagem dele.
 - **Paciente não tem login**: é apenas um registro, e o cadastro não pede senha.
 - Cadastrar cria o usuário no Keycloak (Admin API, `identidade/KeycloakProvedorIdentidade`). Atualizar sincroniza login, nome, e-mail e, se vier, a senha. Inativar ou desativar desliga o usuário no Keycloak. Remover apaga o usuário lá depois do commit.
 - O Keycloak não participa da transação do banco: se a gravação falhar depois de criar o usuário no Keycloak, ele é apagado lá (compensação em `UsuarioService`). Se o Keycloak estiver fora do ar, a operação devolve 503 e nada é gravado.

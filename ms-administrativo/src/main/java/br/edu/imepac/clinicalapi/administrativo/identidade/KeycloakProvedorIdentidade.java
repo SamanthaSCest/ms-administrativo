@@ -199,14 +199,18 @@ public class KeycloakProvedorIdentidade implements ProvedorIdentidade {
         }
     }
 
-    /** O Keycloak manda {"errorMessage": "..."} ou {"error": "..."}; sem corpo, vai o status. */
+    /**
+     * Texto legível do erro do Keycloak: {"errorMessage": "..."} (ex.: usuário já existe) ou
+     * {"error": "<código>", "error_description": "..."} (ex.: política de senha). Sem corpo, vai o status.
+     */
     private static String mensagem(RestClientResponseException e) {
         try {
             Map<?, ?> corpo = e.getResponseBodyAs(Map.class);
             if (corpo != null) {
-                Object msg = corpo.get("errorMessage") != null ? corpo.get("errorMessage") : corpo.get("error");
-                if (msg != null) {
-                    return msg.toString();
+                for (String campo : List.of("errorMessage", "error_description", "error")) {
+                    if (corpo.get(campo) != null) {
+                        return corpo.get(campo).toString();
+                    }
                 }
             }
         } catch (RuntimeException ignorada) {

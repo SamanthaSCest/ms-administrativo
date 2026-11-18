@@ -2774,7 +2774,8 @@ components:
       writeOnly: true
       description: |
         Senha do usuário de acesso (login = CPF). **Obrigatória no cadastro (POST)**; na atualização (PUT),
-        se informada, troca a senha. Vai só para o Keycloak (não é guardada aqui) e segue as regras de senha do realm.
+        se informada, troca a senha. Vai só para o Keycloak (não é guardada aqui). Política do realm: 8 a 72
+        caracteres e diferente do login (CPF); senha recusada pelo Keycloak: 422.
       example: senhaForte1
     UsuarioLogadoResponse:
       type: object

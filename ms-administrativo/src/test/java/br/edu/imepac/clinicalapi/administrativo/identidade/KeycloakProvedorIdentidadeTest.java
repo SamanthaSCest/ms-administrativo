@@ -97,8 +97,9 @@ class KeycloakProvedorIdentidadeTest {
                 .andRespond(withStatus(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"errorMessage\":\"User exists with same username\"}"));
 
-        assertThatThrownBy(() -> provedor.criarUsuario(new ProvedorIdentidade.NovoUsuario("111", "senhaForte1",
-                "Ana", null, true, Set.of()))).isInstanceOf(ConflictException.class);
+        var novo = new ProvedorIdentidade.NovoUsuario("111", "senhaForte1", "Ana", null, true, Set.of());
+
+        assertThatThrownBy(() -> provedor.criarUsuario(novo)).isInstanceOf(ConflictException.class);
     }
 
     @Test
@@ -106,8 +107,10 @@ class KeycloakProvedorIdentidadeTest {
         esperarToken();
         esperarListaDeGrupos();
 
-        assertThatThrownBy(() -> provedor.criarUsuario(new ProvedorIdentidade.NovoUsuario("111", "senhaForte1",
-                "Ana", null, true, Set.of("RECEPCIONISTA", "NAO_EXISTE"))))
+        var novo = new ProvedorIdentidade.NovoUsuario("111", "senhaForte1", "Ana", null, true,
+                Set.of("RECEPCIONISTA", "NAO_EXISTE"));
+
+        assertThatThrownBy(() -> provedor.criarUsuario(novo))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("NAO_EXISTE");
         servidor.verify();  // não houve POST /users
@@ -118,11 +121,13 @@ class KeycloakProvedorIdentidadeTest {
         esperarToken();
         servidor.expect(requestTo(ADMIN + "/users/u-1/reset-password"))
                 .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"error\":\"invalidPasswordMinLengthMessage\"}"));
+                        // Corpo real do Keycloak 26 com a política do realm (length(8))
+                        .body("{\"error\":\"invalidPasswordMinLengthMessage\","
+                                + "\"error_description\":\"Invalid password: minimum length 8.\"}"));
 
         assertThatThrownBy(() -> provedor.definirSenha("u-1", "curta"))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("invalidPasswordMinLengthMessage");
+                .hasMessageContaining("Invalid password: minimum length 8.");
     }
 
     @Test
