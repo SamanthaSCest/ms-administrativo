@@ -8,7 +8,8 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import br.edu.imepac.clinicalapi.common.util.Datas;
+
 import java.time.temporal.ChronoUnit;
 
 /**
@@ -55,7 +56,7 @@ public class PacienteMapper {
     private static void aplicarConsentimento(PacienteRequest request, Paciente paciente) {
         paciente.definirConsentimentoLgpd(Boolean.TRUE.equals(request.getConsentimentoLgpd()),
                 // Em segundos: a resposta do POST e a lida do banco mostram a mesma data
-                request.getVersaoTermoLgpd(), LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS));
+                request.getVersaoTermoLgpd(), Datas.agora().truncatedTo(ChronoUnit.SECONDS));
     }
 
     public PacienteResponse toResponse(Paciente entity) {

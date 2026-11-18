@@ -18,6 +18,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.edu.imepac.clinicalapi.common.util.Datas;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -135,7 +137,7 @@ public class PacienteConvenioService {
     @Transactional(readOnly = true)
     public List<PacienteConvenioResumo> vigentes(Long pacienteId, LocalDate data) {
         buscarPaciente(pacienteId);
-        LocalDate referencia = data == null ? LocalDate.now() : data;
+        LocalDate referencia = data == null ? Datas.hoje() : data;
         return repository.findByPacienteIdAndAtivoTrueOrderByIdAsc(pacienteId).stream()
                 .filter(v -> v.isVigente(referencia))
                 .map(resumoMapper::pacienteConvenio)
@@ -150,7 +152,7 @@ public class PacienteConvenioService {
 
     /** RN07: carteirinha vencida não entra. */
     private static void validarCarteirinha(PacienteConvenioRequest request) {
-        if (request.validade() != null && request.validade().isBefore(LocalDate.now())) {
+        if (request.validade() != null && request.validade().isBefore(Datas.hoje())) {
             throw negocio(HttpStatus.UNPROCESSABLE_ENTITY, "ADM-PCV-003", "Carteirinha vencida em " + request.validade());
         }
     }
@@ -187,7 +189,7 @@ public class PacienteConvenioService {
     private PacienteConvenioResponse toResponse(PacienteConvenio v) {
         return new PacienteConvenioResponse(v.getId(), v.getUuid(), v.getPaciente().getId(),
                 resumoMapper.convenio(v.getConvenio()), v.getNumeroCarteirinha(), v.getValidade(), v.isAtivo(),
-                v.isVigente(LocalDate.now()), v.getCriadoPor(), v.getAtualizadoPor(), v.getDataCriacao(),
+                v.isVigente(Datas.hoje()), v.getCriadoPor(), v.getAtualizadoPor(), v.getDataCriacao(),
                 v.getDataModificacao());
     }
 }

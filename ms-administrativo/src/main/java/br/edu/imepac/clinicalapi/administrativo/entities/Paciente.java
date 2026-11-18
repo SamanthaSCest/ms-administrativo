@@ -11,6 +11,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import br.edu.imepac.clinicalapi.common.util.Datas;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -73,7 +75,7 @@ public class Paciente extends Pessoa {
     }
 
     public int calcularIdade() {
-        return calcularIdade(LocalDate.now());
+        return calcularIdade(Datas.hoje());
     }
 
     public int calcularIdade(LocalDate referencia) {
