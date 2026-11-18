@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -73,6 +74,31 @@ class CadastrosApoioApiTest {
 
         mockMvc.perform(delete("/convenios/{id}", id)).andExpect(status().isNoContent());
         mockMvc.perform(get("/convenios/{id}", id)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void convenio_listar_semSituacao_trazSoAtivos_disponiveisParaVinculacao() throws Exception {
+        MvcResult r = mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
+                .content(convenioJson("111111", CNPJ))).andExpect(status().isCreated()).andReturn();
+        long ativo = objectMapper.readTree(r.getResponse().getContentAsString()).get("id").asLong();
+        r = mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
+                .content(convenioJson("222222", "11444777000161"))).andExpect(status().isCreated()).andReturn();
+        long inativo = objectMapper.readTree(r.getResponse().getContentAsString()).get("id").asLong();
+        mockMvc.perform(patch("/convenios/{id}/status", inativo).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":false}")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/convenios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(ativo));
+        mockMvc.perform(get("/convenios").param("ativo", "false"))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(inativo));
+
+        // Reativado, volta a aparecer entre os disponíveis
+        mockMvc.perform(patch("/convenios/{id}/status", inativo).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":true}")).andExpect(status().isOk());
+        mockMvc.perform(get("/convenios")).andExpect(jsonPath("$.page.totalElements").value(2));
     }
 
     @Test

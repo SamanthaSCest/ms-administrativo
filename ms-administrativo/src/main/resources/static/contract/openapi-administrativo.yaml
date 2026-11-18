@@ -1283,8 +1283,17 @@ paths:
     get:
       tags: [Convênios]
       summary: Lista convênios (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**: são os convênios disponíveis para novas vinculações a pacientes.
+        Use `ativo=false` para consultar os inativos (ex.: para reativá-los).
       operationId: listarConvenios
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'

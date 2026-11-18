@@ -40,9 +40,13 @@ public class ConvenioService {
         return toResponse(salvo);
     }
 
+    /**
+     * Sem situação, traz só os ativos: são os disponíveis para novas vinculações.
+     * Os inativos ({@code ativo=false}) continuam consultáveis para reativação.
+     */
     @Transactional(readOnly = true)
-    public Page<ConvenioResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(this::toResponse);
+    public Page<ConvenioResponse> listar(Boolean ativo, Pageable pageable) {
+        return repository.findByAtivo(ativo == null || ativo, pageable).map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
