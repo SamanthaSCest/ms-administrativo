@@ -1,5 +1,7 @@
 package br.edu.imepac.clinicalapi.administrativo.repositories;
 
+import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
+import br.edu.imepac.clinicalapi.administrativo.entities.UF;
 import org.springframework.data.jpa.domain.Specification;
 
 /**
@@ -32,5 +34,31 @@ public final class Filtros {
             return null;
         }
         return (root, query, cb) -> cb.equal(root.get("cpf"), cpf);
+    }
+
+    /** Número do CRM completo. */
+    public static Specification<Medico> crmIgual(String crm) {
+        if (crm == null || crm.isBlank()) {
+            return null;
+        }
+        return (root, query, cb) -> cb.equal(root.get("crm"), crm.trim());
+    }
+
+    public static Specification<Medico> ufCrmIgual(UF uf) {
+        if (uf == null) {
+            return null;
+        }
+        return (root, query, cb) -> cb.equal(root.get("ufCrm"), uf);
+    }
+
+    /** Médicos que atendem a especialidade (navega pela coleção; distinct evita linhas repetidas). */
+    public static Specification<Medico> atendeEspecialidade(Long especialidadeId) {
+        if (especialidadeId == null) {
+            return null;
+        }
+        return (root, query, cb) -> {
+            query.distinct(true);
+            return cb.equal(root.join("especialidades").get("id"), especialidadeId);
+        };
     }
 }

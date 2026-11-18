@@ -82,6 +82,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
                                 "/procedimentos/**")
                         .authenticated()
+                        // A busca de médicos é POST só para não pôr dado pessoal na URL (RNF08): é leitura
+                        .requestMatchers(HttpMethod.POST, "/medicos/busca").authenticated()
                         .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
                                 "/procedimentos/**").hasRole("ADMIN")
                         .anyRequest().authenticated())

@@ -476,8 +476,17 @@ paths:
     get:
       tags: [Médicos]
       summary: Lista médicos (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**. O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo só sai
+        no `GET /medicos/{id}`. Para filtrar por nome, CRM ou especialidade use `POST /medicos/busca`.
       operationId: listarMedicos
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -515,6 +524,42 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+
+  /medicos/busca:
+    post:
+      tags: [Médicos]
+      summary: Busca médicos por nome, CRM, especialidade e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que o nome fique no corpo, e não na URL (RNF08). Qualquer usuário
+        autenticado pode chamar (mesma regra do `GET /medicos`). Os filtros se combinam: nome busca por parte, sem
+        diferenciar maiúsculas; `crm` é o número completo (com `ufCrm`, no máximo um médico); `especialidadeId` traz
+        quem atende a especialidade; sem `ativo`, só os ativos. Nenhum resultado = página vazia (`content: []`).
+        A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarMedicos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicoBuscaRequest'
+            example:
+              especialidadeId: 1
+              nome: carlos
+      responses:
+        '200':
+          description: Página de médicos (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicoPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /medicos/{id}:
     parameters:
@@ -2306,6 +2351,31 @@ components:
             $ref: '#/components/schemas/MedicoResponse'
         page:
           $ref: '#/components/schemas/PageMetadata'
+
+    MedicoBuscaRequest:
+      type: object
+      description: Filtros da busca de médicos; todos opcionais e combinados (E).
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: carlos
+        crm:
+          type: string
+          maxLength: 20
+          description: Número do CRM completo
+          example: '123456'
+        ufCrm:
+          $ref: '#/components/schemas/UF'
+        especialidadeId:
+          type: integer
+          format: int64
+          description: Médicos que atendem essa especialidade
+          example: 1
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
 
     FuncionarioBuscaRequest:
       type: object

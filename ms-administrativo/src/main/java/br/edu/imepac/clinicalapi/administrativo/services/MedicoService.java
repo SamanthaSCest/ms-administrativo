@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import br.edu.imepac.clinicalapi.administrativo.dto.MedicoBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
@@ -9,13 +10,16 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
 import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
+import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
+import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
 import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,9 +66,28 @@ public class MedicoService {
         return mapper.toResponse(salvo);
     }
 
+    /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
     @Transactional(readOnly = true)
-    public Page<MedicoResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(mapper::toResponse);
+    public Page<MedicoResponse> listar(Boolean ativo, Pageable pageable) {
+        return buscar(new MedicoBuscaRequest(null, null, null, null, ativo), pageable);
+    }
+
+    /**
+     * Busca por nome (parte, sem diferenciar maiúsculas), CRM, UF do CRM, especialidade e situação.
+     * Listagens sempre devolvem o CPF mascarado (RN20); o CPF completo só sai no GET por id.
+     */
+    @Transactional(readOnly = true)
+    public Page<MedicoResponse> buscar(MedicoBuscaRequest filtro, Pageable pageable) {
+        Specification<Medico> spec = Specification.allOf(
+                Filtros.ativo(filtro.ativo()),
+                Filtros.nomeContem(filtro.nome()),
+                Filtros.crmIgual(filtro.crm()),
+                Filtros.ufCrmIgual(filtro.ufCrm()),
+                Filtros.atendeEspecialidade(filtro.especialidadeId()));
+        return repository.findAll(spec, pageable).map(mapper::toResponse).map(r -> {
+            r.setCpf(CpfMascara.mascarar(r.getCpf()));
+            return r;
+        });
     }
 
     @Transactional(readOnly = true)
