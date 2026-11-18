@@ -136,6 +136,31 @@ class PacienteConvenioApiTest {
     }
 
     @Test
+    void detalheDoPaciente_trazConveniosAtivosComCarteirinha_eListagemNao() throws Exception {
+        vincularOk(unimed);
+        long amilVinculo = vincularOk(amil);
+        // Desvinculado não aparece no detalhe (o histórico fica em /pacientes/{id}/convenios)
+        mockMvc.perform(delete("/pacientes/{id}/convenios/{v}", paciente, amilVinculo)).andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/pacientes/{id}", paciente))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.convenios", hasSize(1)))
+                .andExpect(jsonPath("$.convenios[0].convenio.nome").value("Unimed"))
+                .andExpect(jsonPath("$.convenios[0].numeroCarteirinha").value("0001"))
+                .andExpect(jsonPath("$.convenios[0].vigente").value(true));
+
+        mockMvc.perform(get("/pacientes"))
+                .andExpect(jsonPath("$.content[0].convenios").doesNotExist());
+    }
+
+    @Test
+    void detalheDoPaciente_semConvenio_trazListaVazia() throws Exception {
+        mockMvc.perform(get("/pacientes/{id}", paciente))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.convenios", hasSize(0)));
+    }
+
+    @Test
     void vincular_retorna201ComLocation_eVigente() throws Exception {
         LocalDate validade = LocalDate.now().plusYears(1);
         vincular(unimed, " 0001-ABC ", validade)

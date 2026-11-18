@@ -138,6 +138,27 @@ public class UsuarioService {
             throw new BusinessRuleException("Não é possível alterar os próprios acessos");
         }
         Set<Long> ids = request.grupoIds() == null ? Set.of() : request.grupoIds();
+        Set<Grupo> grupos = buscarGrupos(ids);
+        Set<Permissao> permissoes = request.permissoes() == null || request.permissoes().isEmpty()
+                ? EnumSet.noneOf(Permissao.class) : EnumSet.copyOf(request.permissoes());
+        usuario.definirAcessos(grupos, permissoes);
+        log.info("Acessos do usuário {} alterados: grupos {}, permissões avulsas {}", id, ids, permissoes);
+        return toResponse(repository.save(usuario));
+    }
+
+    /**
+     * Grupos escolhidos no cadastro do funcionário: o do cargo + os extras, no lugar dos atuais.
+     * As permissões avulsas não mudam. Quem chama já verificou a permissão USUARIO_GERENCIAR.
+     */
+    public void definirGrupos(Usuario usuario, Grupo grupoDoCargo, Set<Long> extras) {
+        Set<Grupo> grupos = buscarGrupos(extras);
+        grupos.removeIf(g -> g.getId().equals(grupoDoCargo.getId()));
+        grupos.add(grupoDoCargo);
+        usuario.definirGrupos(grupos);
+    }
+
+    /** 422 se algum id não existir. */
+    private Set<Grupo> buscarGrupos(Set<Long> ids) {
         List<Grupo> grupos = grupoRepository.findAllById(ids);
         if (grupos.size() != ids.size()) {
             Set<Long> encontrados = new HashSet<>();
@@ -146,11 +167,7 @@ public class UsuarioService {
             faltando.removeAll(encontrados);
             throw new BusinessRuleException("Grupo(s) de acesso não encontrado(s): " + faltando);
         }
-        Set<Permissao> permissoes = request.permissoes() == null || request.permissoes().isEmpty()
-                ? EnumSet.noneOf(Permissao.class) : EnumSet.copyOf(request.permissoes());
-        usuario.definirAcessos(new HashSet<>(grupos), permissoes);
-        log.info("Acessos do usuário {} alterados: grupos {}, permissões avulsas {}", id, ids, permissoes);
-        return toResponse(repository.save(usuario));
+        return new HashSet<>(grupos);
     }
 
     public UsuarioResponse toResponse(Usuario usuario) {

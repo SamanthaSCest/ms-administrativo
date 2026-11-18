@@ -86,6 +86,12 @@ public class PacienteConvenioService {
         return repository.findByPacienteIdOrderByAtivoDescIdAsc(pacienteId).stream().map(this::toResponse).toList();
     }
 
+    /** Só os vínculos ativos (para o detalhe do paciente). Não valida o paciente: quem chama já o buscou. */
+    @Transactional(readOnly = true)
+    public List<PacienteConvenioResponse> listarAtivos(Long pacienteId) {
+        return repository.findByPacienteIdAndAtivoTrueOrderByIdAsc(pacienteId).stream().map(this::toResponse).toList();
+    }
+
     @Transactional(readOnly = true)
     public PacienteConvenioResponse buscar(Long pacienteId, Long vinculoId) {
         return toResponse(buscarVinculo(pacienteId, vinculoId));

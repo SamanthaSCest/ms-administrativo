@@ -3,6 +3,7 @@ package br.edu.imepac.clinicalapi.administrativo.controllers;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteResponse;
+import br.edu.imepac.clinicalapi.administrativo.services.PacienteConvenioService;
 import br.edu.imepac.clinicalapi.administrativo.services.PacienteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ import java.net.URI;
 public class PacienteController {
 
     private final PacienteService service;
+    private final PacienteConvenioService convenioService;
 
     // @Valid dispara o Bean Validation do DTO; se falhar => MethodArgumentNotValidException => 400
     @PostMapping
@@ -51,9 +53,12 @@ public class PacienteController {
         return service.buscar(filtro, pageable);
     }
 
+    /** Detalhe completo: dados pessoais, contato e os convênios vinculados (com carteirinha). */
     @GetMapping("/{id}")
     public PacienteResponse buscar(@PathVariable Long id) {
-        return service.buscar(id);
+        PacienteResponse paciente = service.buscar(id);
+        paciente.setConvenios(convenioService.listarAtivos(id));
+        return paciente;
     }
 
     @PutMapping("/{id}")

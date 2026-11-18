@@ -100,7 +100,7 @@ Grupo (grupos) ── permissoes (grupo_permissoes)      Permissao: enum fixo no
 | `PUT /usuarios/{id}/acessos` | `USUARIO_GERENCIAR` | `{grupoIds, permissoes}`: substitui grupos e permissões avulsas (não pode alterar os próprios) |
 | `GET /permissoes` | `USUARIO_GERENCIAR` | Lista as permissões existentes |
 | `/grupos` (CRUD) | `USUARIO_GERENCIAR` | Grupos de acesso e suas permissões |
-| `/funcionarios` (CRUD) | `FUNCIONARIO_CONSULTAR` / `_GERENCIAR` | Cadastro de funcionários + usuário |
+| `/funcionarios` (CRUD) | `FUNCIONARIO_CONSULTAR` / `_GERENCIAR` | Cadastro de funcionários + usuário. `grupoIds` (opcional) escolhe grupos além do do cargo e exige também `USUARIO_GERENCIAR` (403 `ADM-FUN-001`) |
 
 ### Controle de acesso (RBAC)
 
@@ -173,6 +173,7 @@ Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do ba
 ## Pacientes: busca, LGPD e convênios
 
 - `GET /pacientes[?ativo=]` sem `ativo` traz só os ativos. Filtro por nome e CPF fica em `POST /pacientes/busca` (corpo `{nome, cpf, ativo}`), para não pôr dado pessoal na URL (RNF08). As listagens devolvem o CPF mascarado; o CPF completo só sai no `GET /pacientes/{id}`.
+- `GET /pacientes/{id}` é o detalhe completo: inclui `convenios`, os vínculos ativos com carteirinha, validade e `vigente`. As listagens não trazem esse campo.
 - Consentimento LGPD (RF26): `consentimentoLgpd` + `versaoTermoLgpd` (obrigatória quando há consentimento). O servidor registra `dataConsentimentoLgpd`, que só muda quando a versão do termo muda; retirar o consentimento limpa os dois.
 - Vínculo com convênio (RF06, HU04) em `/pacientes/{id}/convenios`, direto com o convênio (o plano é de outro grupo). Regras: convênio ativo (`ADM-PCV-001`), um vínculo ativo por convênio (`ADM-PCV-002`, 409), carteirinha não vencida (`ADM-PCV-003`), paciente ativo (`ADM-PCV-004`) e vínculo desvinculado não muda mais (`ADM-PCV-005`). `DELETE` desvincula (inativa) e mantém o histórico. Inativar o convênio não mexe no vínculo, mas ele deixa de ser vigente (RN16).
 - Especialidade com médico ativo não pode ser inativada (RN11): 422 `ADM-ESP-002` com `medicosVinculados`.

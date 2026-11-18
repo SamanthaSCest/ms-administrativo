@@ -442,7 +442,8 @@ paths:
       description: |
         Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
         no grupo de acesso padrão do cargo (RBAC: grupo com o mesmo nome do `Cargo`).
-        `senha` é obrigatória.
+        `senha` é obrigatória. `grupoIds` (opcional) acrescenta outros grupos e exige também a permissão
+        `USUARIO_GERENCIAR` (sem ela: 403 `ADM-FUN-001`); grupo inexistente: 422.
       operationId: criarFuncionario
       requestBody:
         required: true
@@ -530,7 +531,11 @@ paths:
     put:
       tags: [Funcionários]
       summary: Atualiza um funcionário
-      description: Se `senha` for informada, a senha do usuário é trocada; o login acompanha o CPF.
+      description: |
+        Se `senha` for informada, a senha do usuário é trocada; o login acompanha o CPF.
+        Mudar o `cargo` troca o grupo do cargo e mantém os demais. Com `grupoIds` (exige `USUARIO_GERENCIAR`, senão
+        403 `ADM-FUN-001`), o usuário fica com o grupo do cargo + esses grupos, no lugar dos atuais (`[]` deixa só o do
+        cargo). As permissões avulsas não mudam aqui.
       operationId: atualizarFuncionario
       requestBody:
         required: true
@@ -903,7 +908,9 @@ paths:
     get:
       tags: [Pacientes]
       summary: Busca paciente por id
-      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do paciente.
+      description: |
+        Detalhe completo: dados pessoais, contato e os convênios vinculados com o número da carteirinha (`convenios`).
+        Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do paciente.
       operationId: buscarPaciente
       security:
         - bearerAuth: []
@@ -2715,6 +2722,13 @@ components:
           format: date-time
           nullable: true
           description: Quando o paciente consentiu; muda só se a versão do termo mudar
+        convenios:
+          type: array
+          description: |
+            Convênios vinculados (ativos), com carteirinha, validade e `vigente`. **Só no `GET /pacientes/{id}`**;
+            nas listagens e buscas o campo não vem. O histórico completo está em `/pacientes/{id}/convenios`.
+          items:
+            $ref: '#/components/schemas/PacienteConvenioResponse'
         dataCriacao:
           type: string
           format: date-time
@@ -3155,6 +3169,16 @@ components:
           example: F-001
         cargo:
           $ref: '#/components/schemas/Cargo'
+        grupoIds:
+          type: array
+          uniqueItems: true
+          description: |
+            Grupos de acesso além do grupo do cargo (opcional; exige `USUARIO_GERENCIAR`). No PUT, substitui os grupos
+            extras; omitido, os grupos ficam como estão.
+          items:
+            type: integer
+            format: int64
+          example: [6]
         setor:
           type: string
           maxLength: 100

@@ -247,6 +247,69 @@ class RbacApiTest {
     }
 
     @Test
+    void cadastroDoFuncionario_comGrupoExtra_eTrocaNoPut_mantendoPermissoesAvulsas() throws Exception {
+        long extra = criarGrupo("AGENDAMENTO", "\"DISPONIBILIDADE_CONSULTAR\"");
+        String comExtra = funcionarioJson("RECEPCIONISTA").replace("\"senha\"", "\"grupoIds\":[%d],\"senha\"".formatted(extra));
+        JsonNode criado = json(mockMvc.perform(post("/funcionarios").header(HttpHeaders.AUTHORIZATION, bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content(comExtra))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.usuario.grupos[*].nome", containsInAnyOrder("AGENDAMENTO", "RECEPCIONISTA")))
+                .andReturn());
+        long id = criado.get("id").asLong();
+        long usuarioId = criado.get("usuario").get("id").asLong();
+
+        // Uma permissão avulsa, que o PUT do funcionário não pode apagar
+        mockMvc.perform(put("/usuarios/{id}/acessos", usuarioId).header(HttpHeaders.AUTHORIZATION, bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"grupoIds\":[%d,%d],\"permissoes\":[\"INSUMO_CONSULTAR\"]}"
+                                .formatted(grupoId("RECEPCIONISTA"), extra)))
+                .andExpect(status().isOk());
+
+        // grupoIds vazio: fica só o grupo do cargo (agora ESTOQUISTA)
+        String semExtras = funcionarioJson("ESTOQUISTA").replace("\"senha\"", "\"grupoIds\":[],\"senha\"");
+        mockMvc.perform(put("/funcionarios/{id}", id).header(HttpHeaders.AUTHORIZATION, bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content(semExtras))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.usuario.grupos[*].nome", containsInAnyOrder("ESTOQUISTA")))
+                .andExpect(jsonPath("$.usuario.permissoes", containsInAnyOrder("INSUMO_CONSULTAR")));
+    }
+
+    @Test
+    void cadastroDoFuncionario_grupoInexistente_retorna422() throws Exception {
+        String invalido = funcionarioJson("RECEPCIONISTA").replace("\"senha\"", "\"grupoIds\":[999999],\"senha\"");
+        mockMvc.perform(post("/funcionarios").header(HttpHeaders.AUTHORIZATION, bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content(invalido))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void quemSoGerenciaFuncionarios_naoEscolheGrupos() throws Exception {
+        // Grupo RH: cadastra funcionários, mas não gerencia acessos
+        long rh = criarGrupo("RH", "\"FUNCIONARIO_CONSULTAR\",\"FUNCIONARIO_GERENCIAR\"");
+        long usuarioId = criarRecepcionista().get("usuario").get("id").asLong();
+        mockMvc.perform(put("/usuarios/{id}/acessos", usuarioId).header(HttpHeaders.AUTHORIZATION, bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"grupoIds\":[%d]}".formatted(rh)))
+                .andExpect(status().isOk());
+        String rhToken = token(CPF_RECEPCAO, SENHA);
+
+        String outro = """
+                {"nome":"Bia Souza","cpf":"77745678951","dataNascimento":"1992-03-10","matricula":"F-901",
+                 "cargo":"RECEPCIONISTA","dataAdmissao":"2024-02-01","grupoIds":[%d],"senha":"%s"}
+                """.formatted(grupoId("ADMINISTRADOR"), SENHA);
+        mockMvc.perform(post("/funcionarios").header(HttpHeaders.AUTHORIZATION, bearer(rhToken))
+                        .contentType(MediaType.APPLICATION_JSON).content(outro))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("ADM-FUN-001"));
+
+        // Sem grupoIds o cadastro segue normal (só o grupo do cargo)
+        mockMvc.perform(post("/funcionarios").header(HttpHeaders.AUTHORIZATION, bearer(rhToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(outro.replace(",\"grupoIds\":[%d]".formatted(grupoId("ADMINISTRADOR")), "")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.usuario.grupos[*].nome", containsInAnyOrder("RECEPCIONISTA")));
+    }
+
+    @Test
     void recepcionista_naoGerenciaAcessos() throws Exception {
         criarRecepcionista();
         String recepcao = token(CPF_RECEPCAO, SENHA);

@@ -46,8 +46,12 @@ public class FuncionarioService {
             throw new ConflictException("Já existe funcionário com a matrícula: " + request.getMatricula());
         }
         Funcionario funcionario = mapper.toEntity(request);
-        // Usuário de acesso (login = CPF) no grupo padrão do cargo
-        funcionario.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), grupo(request.getCargo())));
+        // Usuário de acesso (login = CPF) no grupo padrão do cargo (+ os grupos extras informados)
+        Grupo grupoDoCargo = grupo(request.getCargo());
+        funcionario.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), grupoDoCargo));
+        if (request.getGrupoIds() != null) {
+            usuarioService.definirGrupos(funcionario.getUsuario(), grupoDoCargo, request.getGrupoIds());
+        }
         Funcionario salvo = repository.save(funcionario);
         eventos.criado(salvo);
         return mapper.toResponse(salvo);
@@ -99,7 +103,10 @@ public class FuncionarioService {
         mapper.updateEntity(request, funcionario);
         Grupo grupoNovo = grupo(request.getCargo());
         usuarioService.sincronizar(funcionario, request.getSenha(), grupoNovo);
-        if (cargoAnterior != request.getCargo()) {
+        if (request.getGrupoIds() != null && funcionario.getUsuario() != null) {
+            // Grupos informados: o do cargo (novo) + os extras, no lugar dos atuais
+            usuarioService.definirGrupos(funcionario.getUsuario(), grupoNovo, request.getGrupoIds());
+        } else if (cargoAnterior != request.getCargo()) {
             usuarioService.trocarGrupo(funcionario.getUsuario(), grupo(cargoAnterior), grupoNovo);
         }
         Funcionario salvo = repository.save(funcionario);

@@ -77,9 +77,17 @@ public class Usuario extends BaseEntity {
 
     /** Troca grupos e permissões avulsas mantendo as coleções gerenciadas pelo JPA. */
     public void definirAcessos(Set<Grupo> novosGrupos, Set<Permissao> novasPermissoes) {
-        grupos.clear();
-        grupos.addAll(novosGrupos);
+        Set<Permissao> copia = EnumSet.noneOf(Permissao.class);
+        copia.addAll(novasPermissoes);  // cópia: novasPermissoes pode ser a própria coleção
+        definirGrupos(novosGrupos);
         permissoes.clear();
-        permissoes.addAll(novasPermissoes);
+        permissoes.addAll(copia);
+    }
+
+    /** Troca só os grupos; as permissões avulsas ficam. */
+    public void definirGrupos(Set<Grupo> novosGrupos) {
+        Set<Grupo> copia = new HashSet<>(novosGrupos);
+        grupos.clear();
+        grupos.addAll(copia);
     }
 }
