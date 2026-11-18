@@ -21,9 +21,10 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | `common` | – | Biblioteca: exceções, `ErrorResponse`, `BaseEntity`, `BaseExceptionHandler` (handlers de erro reaproveitados pelos módulos) |
 | `ms-administrativo` | 8081 | Especialidades, Médicos e Pacientes |
 | `ms-agendamento` | 8082 | Consultas (agendar, remarcar, cancelar, realizar) |
-| `api-gateway` | 8080 | Ponto de entrada único; roteia por prefixo |
+| `api-gateway` | 8080 | Ponto de entrada único; valida o token do Keycloak e roteia por prefixo |
+| `keycloak` | 8180 | Login, grupos e permissões (realm `clinical`, importado de `keycloak/realm-clinical.json`) |
 
-(Segurança/Keycloak, AWS e Kubernetes ficam para uma etapa futura.)
+(AWS e Kubernetes ficam para uma etapa futura.)
 
 ## Tecnologias e para que servem
 
@@ -42,7 +43,8 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **SLF4J + Logback** | todos | SLF4J é a API de logs usada no código (`LoggerFactory.getLogger`); o Logback é quem escreve, já incluído no Spring Boot. |
 | **@RestControllerAdvice / @ExceptionHandler** | `exceptions/GlobalExceptionHandler` de cada serviço (herda `BaseExceptionHandler` do `common`) | Ponto único de tratamento de erros (Exception Handling no Spring MVC): converte exceções no JSON padrão (`ErrorResponse`) com o HTTP status correto. |
 | **RestClient** | `ms-agendamento` | Cliente HTTP do Spring para um microserviço chamar outro (aqui, agendamento -> administrativo), com timeouts. |
-| **Spring Cloud Gateway** | `api-gateway` | Porta de entrada única: recebe as requisições e roteia por prefixo (`/administrativo/**`, `/agendamento/**`), sem regra de negócio. Nas rotas futuras é onde entrariam autenticação e CORS. |
+| **Spring Cloud Gateway** | `api-gateway` | Porta de entrada única: recebe as requisições e roteia por prefixo (`/administrativo/**`, `/agendamento/**`), sem regra de negócio. Barra quem chega sem token válido do Keycloak (401); as permissões ficam com cada serviço. |
+| **Keycloak 26** | docker-compose | Servidor de identidade (OAuth2/OpenID Connect): login, senha, grupos e permissões (client roles). Os serviços só validam o token (Spring Security Resource Server); o ms-administrativo cria os usuários pela Admin API e o ms-agendamento pega token com *client credentials*. |
 | **Spring Boot Actuator** | todos | Endpoints de saúde (`/actuator/health`) usados pelos healthchecks do Docker. |
 | **OpenAPI / Swagger** | serviços | O contrato da API (YAML) é a especificação combinada entre os times. |
 | **springdoc-openapi (Swagger UI)** | serviços | Página web interativa (`/swagger-ui.html`) que exibe o contrato e permite testar os endpoints. |
@@ -51,7 +53,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **Spring Boot Test + MockMvc** | testes | Testes de integração: sobem o contexto Spring completo e chamam a API via HTTP simulado. |
 | **H2** | testes | Banco em memória usado só nos testes, para rodarem sem Docker (modo PostgreSQL no administrativo, modo MySQL no agendamento). |
 | **Docker (multi-stage)** | todos | Empacota cada microserviço numa imagem: o 1º estágio compila com Maven, o 2º só leva o JRE e o `.jar` (imagem menor). |
-| **Docker Compose** | raiz | Sobe todo o ambiente (2 bancos + 3 serviços) com um comando, na ordem certa (healthchecks + `depends_on`). |
+| **Docker Compose** | raiz | Sobe todo o ambiente (bancos, RabbitMQ, Keycloak + 3 serviços) com um comando, na ordem certa (healthchecks + `depends_on`). |
 
 Tipos de teste do projeto: **unitário** (`services/`, Mockito, sem Spring), **integração** (`integration/`, Spring +
 H2), **cliente HTTP** (`client/`, `MockRestServiceServer`) e **contrato** (`contract/`, valida que o YAML OpenAPI é válido).
@@ -100,7 +102,7 @@ docker build -f api-gateway/Dockerfile       -t clinical/api-gateway:latest .
 ### Opção 1 — tudo de uma vez (docker compose)
 
 ```bash
-docker compose up -d --build     # sobe 2 bancos (um por serviço) + 3 serviços (aguarda os healthchecks)
+docker compose up -d --build     # sobe bancos, RabbitMQ, Keycloak e os 3 serviços (aguarda os healthchecks)
 docker compose ps
 docker compose logs -f ms-agendamento
 docker compose down              # para tudo (adicione -v para apagar o banco)
@@ -158,13 +160,23 @@ Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysq
 | `ADMINISTRATIVO_URL` | agendamento, gateway | `http://localhost:8081` |
 | `AGENDAMENTO_URL` | gateway | `http://localhost:8082` |
 | `SERVER_PORT` | todos | 8081 / 8082 / 8080 |
+| `KEYCLOAK_ISSUER` | administrativo, gateway | `http://localhost:8180/realms/clinical` (o `iss` dos tokens: endereço **público** do Keycloak) |
+| `KEYCLOAK_URL`, `KEYCLOAK_CLIENT_SECRET` | administrativo | `http://localhost:8180`, `dev-ms-administrativo-secret` (chaves públicas e Admin API) |
+| `KEYCLOAK_JWK_SET_URI` | gateway | `http://localhost:8180/realms/clinical/protocol/openid-connect/certs` |
+| `KEYCLOAK_TOKEN_URI`, `KEYCLOAK_CLIENT_SECRET` | agendamento | `http://localhost:8180/realms/clinical/protocol/openid-connect/token`, `dev-ms-agendamento-secret` |
+
+> O Keycloak emite todo token com `iss=http://localhost:8180/realms/clinical` (`KC_HOSTNAME`), mesmo quando o
+> serviço pede pela rede interna (`keycloak:8080`). Por isso no compose as chaves e a Admin API usam o endereço
+> interno, mas o issuer validado é o público. Os segredos `dev-*` são só para desenvolvimento: em outro ambiente,
+> gere novos no Keycloak e passe por variável. O realm só é importado na **primeira** subida; para reimportar,
+> `docker compose down -v` (apaga também os bancos).
 
 ## Executar sem Docker para os serviços (desenvolvimento)
 
 Suba só o banco e rode os serviços pela IDE ou Maven:
 
 ```bash
-docker compose up -d postgres-administrativo mysql-agendamento
+docker compose up -d postgres-administrativo mysql-agendamento rabbitmq keycloak
 mvn -pl ms-administrativo spring-boot:run
 mvn -pl ms-agendamento spring-boot:run     # em outro terminal
 mvn -pl api-gateway spring-boot:run        # em outro terminal
@@ -173,22 +185,30 @@ mvn -pl api-gateway spring-boot:run        # em outro terminal
 ## Testando a API (via gateway)
 
 ```bash
-# 1. especialidade -> 2. médico -> 3. paciente
-curl -s -X POST localhost:8080/administrativo/especialidades -H 'Content-Type: application/json' \
+# 0. token do Keycloak (admin do realm; direct grant só em desenvolvimento). Requer jq
+TOKEN=$(curl -s -d grant_type=password -d client_id=clinical-web -d username=admin -d password=admin12345 \
+  http://localhost:8180/realms/clinical/protocol/openid-connect/token | jq -r .access_token)
+AUTH="Authorization: Bearer $TOKEN"
+
+# 1. especialidade -> 2. médico (cria também o usuário dele no Keycloak) -> 3. paciente
+curl -s -X POST localhost:8080/administrativo/especialidades -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"nome":"Cardiologia","descricao":"Coração"}'
 
-curl -s -X POST localhost:8080/administrativo/medicos -H 'Content-Type: application/json' \
-  -d '{"nome":"Maria Souza","cpf":"12345678901","dataNascimento":"1985-04-20","crm":"CRM-SP-1","especialidadeId":1}'
+curl -s -X POST localhost:8080/administrativo/medicos -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"nome":"Maria Souza","cpf":"12345678909","dataNascimento":"1985-04-20","crm":"CRM-SP-1","ufCrm":"SP",
+       "especialidadeIds":[1],"senha":"senhaForte1"}'
 
-curl -s -X POST localhost:8080/administrativo/pacientes -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8080/administrativo/pacientes -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"nome":"João Pereira","cpf":"98765432100","dataNascimento":"1990-01-15"}'
 
-# 4. agendar consulta (o ms-agendamento valida médico e paciente no ms-administrativo)
-curl -s -X POST localhost:8080/agendamento/consultas -H 'Content-Type: application/json' \
+# 4. agendar consulta (o ms-agendamento valida médico e paciente no ms-administrativo com o próprio token)
+curl -s -X POST localhost:8080/agendamento/consultas -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"medicoId":1,"pacienteId":1,"dataAgendamento":"2030-05-10T14:30:00","sintomas":"dor de cabeça"}'
 
-curl -s "localhost:8080/agendamento/consultas?status=AGENDADO"
+curl -s "localhost:8080/agendamento/consultas?status=AGENDADO" -H "$AUTH"
 ```
+
+Sem token, o gateway responde 401. A médica cadastrada já consegue pegar o próprio token (`username` = CPF).
 
 Erros seguem sempre o mesmo formato (`timestamp`, `status`, `error`, `message`, `path`, `details[]`):
 400 validação, 404 não encontrado, 409 conflito, 422 regra de negócio, 503 serviço dependente fora do ar.
