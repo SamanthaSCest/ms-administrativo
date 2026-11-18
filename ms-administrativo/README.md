@@ -159,6 +159,13 @@ Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do ba
 - Vínculo com convênio (RF06, HU04) em `/pacientes/{id}/convenios`, direto com o convênio (o plano é de outro grupo). Regras: convênio ativo (`ADM-PCV-001`), um vínculo ativo por convênio (`ADM-PCV-002`, 409), carteirinha não vencida (`ADM-PCV-003`), paciente ativo (`ADM-PCV-004`) e vínculo desvinculado não muda mais (`ADM-PCV-005`). `DELETE` desvincula (inativa) e mantém o histórico. Inativar o convênio não mexe no vínculo, mas ele deixa de ser vigente (RN16).
 - Especialidade com médico ativo não pode ser inativada (RN11): 422 `ADM-ESP-002` com `medicosVinculados`.
 
+## Funcionários, médicos e convênios: listagem e busca
+
+- `GET /funcionarios`, `GET /medicos` e `GET /convenios` aceitam `?ativo=`; sem ele trazem só os ativos. Em convênios, os ativos são os disponíveis para novas vinculações; `?ativo=false` traz os inativos para reativação.
+- `POST /funcionarios/busca` (somente ADMIN), corpo `{nome, cpf, ativo}`.
+- `POST /medicos/busca` (qualquer usuário autenticado, como o `GET`), corpo `{nome, crm, ufCrm, especialidadeId, ativo}`; os filtros se combinam.
+- Como em pacientes, os filtros vão no corpo (RNF08), nenhum resultado devolve página vazia, e as listagens e buscas de funcionários e médicos devolvem o CPF mascarado (RN20); o CPF completo só sai no `GET /{id}`.
+
 ## Integração e eventos
 
 Escopo do grupo: só o ms-administrativo (os demais microserviços são de outros grupos). Não há Unidade, e Plano de convênio fica com outro grupo.
