@@ -217,8 +217,18 @@ paths:
     get:
       tags: [Funcionários]
       summary: Lista funcionários (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**. O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo só sai
+        no `GET /funcionarios/{id}`. Para filtrar por nome ou CPF use `POST /funcionarios/busca`: dado pessoal não
+        vai na URL (RNF08).
       operationId: listarFuncionarios
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -268,6 +278,42 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+  /funcionarios/busca:
+    post:
+      tags: [Funcionários]
+      summary: Busca funcionários por nome, CPF e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Somente ADMIN.
+        Nome busca por parte, sem diferenciar maiúsculas; CPF completo traz no máximo um funcionário; sem `ativo`,
+        só os ativos. Nenhum resultado = página vazia (`content: []`). A paginação continua na query
+        (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarFuncionarios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuncionarioBuscaRequest'
+            example:
+              nome: ana
+              ativo: true
+      responses:
+        '200':
+          description: Página de funcionários (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /funcionarios/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -2260,6 +2306,24 @@ components:
             $ref: '#/components/schemas/MedicoResponse'
         page:
           $ref: '#/components/schemas/PageMetadata'
+
+    FuncionarioBuscaRequest:
+      type: object
+      description: Filtros da busca de funcionários; todos opcionais.
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: ana
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+          description: CPF completo, só dígitos
+          example: '12345678909'
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
 
     PacienteBuscaRequest:
       type: object

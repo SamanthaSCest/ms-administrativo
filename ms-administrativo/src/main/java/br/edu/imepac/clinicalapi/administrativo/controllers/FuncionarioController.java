@@ -1,5 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.controllers;
 
+import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioResponse;
 import br.edu.imepac.clinicalapi.administrativo.services.FuncionarioService;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -43,9 +45,16 @@ public class FuncionarioController {
         return ResponseEntity.created(location).body(criado);
     }
 
+    /** Sem "ativo", traz só os ativos. CPF mascarado. Filtros por nome/CPF ficam no POST /busca (RNF08). */
     @GetMapping
-    public Page<FuncionarioResponse> listar(Pageable pageable) {
-        return service.listar(pageable);
+    public Page<FuncionarioResponse> listar(@RequestParam(required = false) Boolean ativo, Pageable pageable) {
+        return service.listar(ativo, pageable);
+    }
+
+    /** Busca com dados pessoais no corpo, e não na URL (RNF08). Paginação continua na query (?page=&size=). */
+    @PostMapping("/busca")
+    public Page<FuncionarioResponse> buscar(@Valid @RequestBody FuncionarioBuscaRequest filtro, Pageable pageable) {
+        return service.buscar(filtro, pageable);
     }
 
     @GetMapping("/{id}")

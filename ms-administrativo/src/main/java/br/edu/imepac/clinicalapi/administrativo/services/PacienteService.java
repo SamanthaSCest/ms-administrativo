@@ -8,7 +8,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.PacienteResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
 import br.edu.imepac.clinicalapi.administrativo.entities.ResponsavelLegal;
 import br.edu.imepac.clinicalapi.administrativo.mapper.PacienteMapper;
-import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteFiltros;
+import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
 import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
 import org.springframework.data.jpa.domain.Specification;
@@ -71,9 +71,9 @@ public class PacienteService {
 
     private Page<PacienteResponse> pesquisar(PacienteBuscaRequest filtro, Pageable pageable) {
         Specification<Paciente> spec = Specification.allOf(
-                PacienteFiltros.ativo(filtro.ativo()),
-                PacienteFiltros.nomeContem(filtro.nome()),
-                PacienteFiltros.cpfIgual(filtro.cpf()));
+                Filtros.ativo(filtro.ativo()),
+                Filtros.nomeContem(filtro.nome()),
+                Filtros.cpfIgual(filtro.cpf()));
         return repository.findAll(spec, pageable).map(mapper::toResponse).map(PacienteService::mascararCpf);
     }
 

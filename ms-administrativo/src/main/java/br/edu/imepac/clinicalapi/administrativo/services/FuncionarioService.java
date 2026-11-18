@@ -1,11 +1,14 @@
 package br.edu.imepac.clinicalapi.administrativo.services;
 
+import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
 import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.mapper.FuncionarioMapper;
+import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
+import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,9 +52,26 @@ public class FuncionarioService {
         return mapper.toResponse(salvo);
     }
 
+    /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
     @Transactional(readOnly = true)
-    public Page<FuncionarioResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(mapper::toResponse);
+    public Page<FuncionarioResponse> listar(Boolean ativo, Pageable pageable) {
+        return buscar(new FuncionarioBuscaRequest(null, null, ativo), pageable);
+    }
+
+    /**
+     * Busca por nome (parte, sem diferenciar maiúsculas), CPF completo e situação.
+     * Listagens sempre devolvem o CPF mascarado (RN20); o CPF completo só sai no GET por id.
+     */
+    @Transactional(readOnly = true)
+    public Page<FuncionarioResponse> buscar(FuncionarioBuscaRequest filtro, Pageable pageable) {
+        Specification<Funcionario> spec = Specification.allOf(
+                Filtros.ativo(filtro.ativo()),
+                Filtros.nomeContem(filtro.nome()),
+                Filtros.cpfIgual(filtro.cpf()));
+        return repository.findAll(spec, pageable).map(mapper::toResponse).map(r -> {
+            r.setCpf(CpfMascara.mascarar(r.getCpf()));
+            return r;
+        });
     }
 
     @Transactional(readOnly = true)
