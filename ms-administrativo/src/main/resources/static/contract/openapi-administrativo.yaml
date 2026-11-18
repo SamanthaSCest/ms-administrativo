@@ -12,35 +12,49 @@ info:
 
     ## Autenticação
 
-    Só a equipe da clínica acessa o sistema: **funcionários** (nível `ADMIN` ou `FUNCIONARIO`) e **médicos** (`MEDICO`).
-    Pacientes são apenas registros e **não têm login**.
+    Só a equipe da clínica acessa o sistema: **funcionários** e **médicos**. Pacientes são apenas registros e
+    **não têm login**.
 
     1. Faça `POST /auth/login` com `login` e `senha`. Funcionários e médicos usam o **CPF** como login;
        o administrador inicial é configurado por `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local: `admin`/`admin12345`).
     2. Clique em **Authorize** e cole o `accessToken` em `bearerAuth` (sem o prefixo "Bearer").
     3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
-       perfil sem permissão: **403** (ambos no formato `ProblemDetail`).
+       sem a permissão exigida: **403** (ambos no formato `ProblemDetail`).
 
-    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`): leitura em geral e, para o
-    ms-estoque, também escrita em `/insumos`.
+    ## Controle de acesso (RBAC)
 
-    O nível de acesso do funcionário vem do **cargo**: `ADMINISTRADOR` → `ADMIN`; os demais → `FUNCIONARIO`.
+    O acesso é por **permissão**. Cada usuário tem as permissões dos seus **grupos** mais permissões **avulsas**
+    (`GET /permissoes` lista todas). Convenção: `<RECURSO>_CONSULTAR` libera as leituras (GET e as buscas por POST);
+    `<RECURSO>_GERENCIAR` libera cadastrar, alterar, ativar/inativar e remover.
 
-    | Recurso | ADMIN | FUNCIONARIO | MEDICO | Serviço (X-Api-Key) |
-    |---|---|---|---|---|
-    | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | — |
-    | `/usuarios`, `/funcionarios` | ✔ | — | — | — |
-    | Especialidades, médicos, convênios, salas, procedimentos (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Especialidades, médicos, convênios, salas, procedimentos (escrita) | ✔ | — | — | — |
-    | Pacientes e responsáveis legais (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Pacientes e responsáveis legais (escrita) | ✔ | ✔ | — | — |
-    | Insumos (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Insumos (escrita) | ✔ | — | — | ✔ (ms-estoque) |
-    | Custos dos médicos (leitura) | ✔ | ✔ | — | ✔ |
-    | Custos dos médicos (escrita) | ✔ | — | — | — |
-    | Disponibilidades (leitura, inclusive `/agenda`) | ✔ | ✔ | ✔ | ✔ |
-    | Disponibilidades (escrita) | ✔ | — | — | — |
-    | `/integracao/**` | ✔ | — | — | ✔ |
+    - No cadastro, o funcionário entra no **grupo do seu cargo** (mesmo nome do `Cargo`) e o médico no grupo `MEDICO`.
+      Mudar o cargo troca esse grupo; os demais grupos e as permissões avulsas continuam.
+    - O administrador cria grupos (`/grupos`) e define os acessos de cada usuário (`PUT /usuarios/{id}/acessos`).
+      Grupos padrão não podem ser removidos nem renomeados; o grupo `ADMINISTRADOR` não pode ser alterado.
+    - As permissões vão no token (claim `permissoes`): mudanças valem **a partir do próximo login**.
+    - `GET /auth/me` devolve `permissoesEfetivas`, para o front montar menus e telas.
+
+    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`) e recebem um conjunto fixo de
+    permissões: leitura dos cadastros, `/integracao` e, para o ms-estoque, escrita em `/insumos`.
+
+    Grupos padrão (**G** = consulta e gerencia; **C** = só consulta):
+
+    | Recurso | ADMINISTRADOR | RECEPCIONISTA | ESTOQUISTA | RESPONSAVEL_FINANCEIRO | MEDICO | Serviço (X-Api-Key) |
+    |---|---|---|---|---|---|---|
+    | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | ✔ | ✔ | — |
+    | Usuários, grupos e permissões | G | — | — | — | — | — |
+    | Funcionários | G | — | — | — | — | — |
+    | Pacientes, responsáveis e convênios do paciente | G | G | — | C | C | C |
+    | Médicos e especialidades | G | C | — | C | C | C |
+    | Convênios | G | C | — | C | C | C |
+    | Salas | G | C | C | — | C | C |
+    | Procedimentos | G | C | C | C | C | C |
+    | Insumos | G | — | G | C | C | G |
+    | Custos dos médicos | G | C | — | G | — | C |
+    | Disponibilidades (inclusive `/agenda`) | G | C | — | — | C | C |
+    | `/integracao/**` | ✔ | — | — | — | — | ✔ |
+
+    O RECEPCIONISTA cobre atendimento e agendamento (cadastra pacientes e consulta médicos e disponibilidades).
 servers:
   - url: http://localhost:8081
     description: Direto no microserviço
@@ -50,9 +64,11 @@ tags:
   - name: Autenticação
     description: Login (JWT), dados do usuário logado e troca de senha
   - name: Usuários
-    description: Gestão dos usuários de acesso (somente ADMIN)
+    description: Gestão dos usuários de acesso e dos seus acessos (USUARIO_GERENCIAR)
+  - name: Grupos e permissões
+    description: RBAC - grupos de acesso e a lista de permissões (USUARIO_GERENCIAR)
   - name: Funcionários
-    description: Cadastro da equipe da clínica com dados pessoais e profissionais (somente ADMIN)
+    description: Cadastro da equipe da clínica com dados pessoais e profissionais
   - name: Especialidades
   - name: Médicos
   - name: Pacientes
@@ -67,7 +83,7 @@ tags:
   - name: Custos dos médicos
     description: Valor de consulta (por especialidade) ou de procedimento, com vigência
   - name: Disponibilidades
-    description: Horários de atendimento dos médicos, cadastrados pelo ADMIN
+    description: Horários de atendimento dos médicos (DISPONIBILIDADE_GERENCIAR para cadastrar)
   - name: Ativação
     description: Inativar/reativar cadastros (EntidadeBase) sem apagá-los
   - name: Integração
@@ -212,6 +228,183 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+  /usuarios/{id}/acessos:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Usuários]
+      summary: Define os grupos e as permissões avulsas do usuário
+      description: |
+        **Substitui** os grupos e as permissões avulsas atuais (listas vazias tiram tudo). Vale a partir do próximo
+        login do usuário. O administrador não altera os próprios acessos (422); grupo inexistente também é 422.
+      operationId: definirAcessosUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioAcessosRequest'
+            example:
+              grupoIds: [2]
+              permissoes: [INSUMO_CONSULTAR]
+      responses:
+        '200':
+          description: Acessos alterados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /permissoes:
+    get:
+      tags: [Grupos e permissões]
+      summary: Lista as permissões existentes
+      description: As permissões são fixas no código (as regras de acesso as referenciam); só se consultam.
+      operationId: listarPermissoes
+      responses:
+        '200':
+          description: Todas as permissões
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PermissaoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /grupos:
+    get:
+      tags: [Grupos e permissões]
+      summary: Lista grupos de acesso (paginado)
+      operationId: listarGrupos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Página de grupos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrupoPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Grupos e permissões]
+      summary: Cria um grupo de acesso
+      description: Nome único (409). O grupo criado não é padrão (pode ser removido quando não tiver usuários).
+      operationId: criarGrupo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrupoRequest'
+      responses:
+        '201':
+          description: Criado. Header `Location` aponta para o recurso.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrupoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /grupos/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Grupos e permissões]
+      summary: Busca grupo por id
+      operationId: buscarGrupo
+      responses:
+        '200':
+          description: Grupo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrupoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Grupos e permissões]
+      summary: Altera nome, descrição e permissões do grupo
+      description: |
+        As permissões informadas substituem as atuais e valem a partir do próximo login de cada usuário do grupo.
+        Grupo padrão não pode ser renomeado (422); o grupo `ADMINISTRADOR` não pode ser alterado (422). Nome já usado: 409.
+      operationId: atualizarGrupo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrupoRequest'
+      responses:
+        '200':
+          description: Grupo alterado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrupoResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Grupos e permissões]
+      summary: Remove um grupo
+      description: Grupo padrão não pode ser removido (422); grupo com usuários também não (409).
+      operationId: removerGrupo
+      responses:
+        '204':
+          description: Removido
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /funcionarios:
     get:
@@ -248,7 +441,7 @@ paths:
       summary: Cadastra um funcionário e o seu usuário de acesso
       description: |
         Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
-        com o nível de acesso definido pelo cargo (`ADMINISTRADOR` → `ADMIN`; demais → `FUNCIONARIO`).
+        no grupo de acesso padrão do cargo (RBAC: grupo com o mesmo nome do `Cargo`).
         `senha` é obrigatória.
       operationId: criarFuncionario
       requestBody:
@@ -283,7 +476,7 @@ paths:
       tags: [Funcionários]
       summary: Busca funcionários por nome, CPF e situação (paginado)
       description: |
-        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Somente ADMIN.
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Exige `FUNCIONARIO_CONSULTAR`.
         Nome busca por parte, sem diferenciar maiúsculas; CPF completo traz no máximo um funcionário; sem `ativo`,
         só os ativos. Nenhum resultado = página vazia (`content: []`). A paginação continua na query
         (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
@@ -530,8 +723,8 @@ paths:
       tags: [Médicos]
       summary: Busca médicos por nome, CRM, especialidade e situação (paginado)
       description: |
-        É uma **leitura**: usa POST só para que o nome fique no corpo, e não na URL (RNF08). Qualquer usuário
-        autenticado pode chamar (mesma regra do `GET /medicos`). Os filtros se combinam: nome busca por parte, sem
+        É uma **leitura**: usa POST só para que o nome fique no corpo, e não na URL (RNF08). Exige
+        `MEDICO_CONSULTAR` (mesma regra do `GET /medicos`). Os filtros se combinam: nome busca por parte, sem
         diferenciar maiúsculas; `crm` é o número completo (com `ufCrm`, no máximo um médico); `especialidadeId` traz
         quem atende a especialidade; sem `ativo`, só os ativos. Nenhum resultado = página vazia (`content: []`).
         A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
@@ -673,8 +866,8 @@ paths:
       tags: [Pacientes]
       summary: Busca pacientes por nome, CPF e situação (paginado)
       description: |
-        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Quem pode chamar
-        segue a regra de leitura de pacientes (ADMIN, FUNCIONARIO, MEDICO ou serviço). Nome busca por parte, sem
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). A chamada
+        exige `PACIENTE_CONSULTAR`, como a leitura de pacientes. Nome busca por parte, sem
         diferenciar maiúsculas; CPF completo traz no máximo um paciente; sem `ativo`, só os ativos.
         A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
       operationId: buscarPacientes
@@ -1488,7 +1681,7 @@ paths:
                 $ref: '#/components/schemas/InsumoPage'
     post:
       tags: [Insumos]
-      summary: Cadastra um insumo (ADMIN ou ms-estoque)
+      summary: Cadastra um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: criarInsumo
       security:
         - bearerAuth: []
@@ -1533,7 +1726,7 @@ paths:
           $ref: '#/components/responses/NotFound'
     put:
       tags: [Insumos]
-      summary: Atualiza um insumo (ADMIN ou ms-estoque)
+      summary: Atualiza um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: atualizarInsumo
       security:
         - bearerAuth: []
@@ -1559,7 +1752,7 @@ paths:
           $ref: '#/components/responses/Conflict'
     delete:
       tags: [Insumos]
-      summary: Remove um insumo (ADMIN ou ms-estoque)
+      summary: Remove um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       description: Retorna 409 se o insumo for usado em algum procedimento.
       operationId: removerInsumo
       security:
@@ -2005,7 +2198,7 @@ paths:
         custos/disponibilidades inativos são ignorados. Inativar médico ou funcionário também bloqueia o login;
         ninguém pode inativar o próprio cadastro (422). Especialidade com médico **ativo** vinculado não pode ser
         inativada (RN11): 422 com `codigo: ADM-ESP-002` e `medicosVinculados` (quantidade). Quem pode chamar segue a regra de **escrita** do recurso
-        (ex.: pacientes → ADMIN ou FUNCIONARIO; médicos → ADMIN; insumos → ADMIN ou ms-estoque).
+        (permissão `<RECURSO>_GERENCIAR`, ex.: pacientes → `PACIENTE_GERENCIAR`; insumos → `INSUMO_GERENCIAR`).
         Usuários têm o endpoint próprio `PATCH /usuarios/{id}/status`.
       operationId: alterarStatusCadastro
       security:
@@ -2131,7 +2324,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
     Forbidden:
-      description: Autenticado, mas o perfil não tem permissão para esta operação
+      description: Autenticado, mas sem a permissão exigida por esta operação
       content:
         application/problem+json:
           schema:
@@ -2730,10 +2923,98 @@ components:
           type: string
 
     # ---------- Autenticação e usuários ----------
-    Perfil:
+    Permissao:
       type: string
-      enum: [ADMIN, FUNCIONARIO, MEDICO]
-      description: Nível de acesso do usuário (vira ROLE_<perfil> na API). Paciente não tem acesso.
+      description: |
+        Permissão do RBAC (vira uma authority com o mesmo nome). `*_CONSULTAR`: leituras; `*_GERENCIAR`: escrita.
+      enum: [USUARIO_GERENCIAR, FUNCIONARIO_CONSULTAR, FUNCIONARIO_GERENCIAR, MEDICO_CONSULTAR, MEDICO_GERENCIAR,
+             ESPECIALIDADE_CONSULTAR, ESPECIALIDADE_GERENCIAR, PACIENTE_CONSULTAR, PACIENTE_GERENCIAR,
+             CONVENIO_CONSULTAR, CONVENIO_GERENCIAR, SALA_CONSULTAR, SALA_GERENCIAR, PROCEDIMENTO_CONSULTAR,
+             PROCEDIMENTO_GERENCIAR, INSUMO_CONSULTAR, INSUMO_GERENCIAR, CUSTO_MEDICO_CONSULTAR,
+             CUSTO_MEDICO_GERENCIAR, DISPONIBILIDADE_CONSULTAR, DISPONIBILIDADE_GERENCIAR, INTEGRACAO_CONSULTAR]
+    PermissaoResponse:
+      type: object
+      properties:
+        codigo:
+          $ref: '#/components/schemas/Permissao'
+        descricao:
+          type: string
+          example: Consultar pacientes, responsáveis e convênios do paciente
+    GrupoResumo:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+          example: RECEPCIONISTA
+    GrupoRequest:
+      type: object
+      required: [nome, permissoes]
+      properties:
+        nome:
+          type: string
+          maxLength: 50
+          example: AGENDAMENTO
+        descricao:
+          type: string
+          maxLength: 255
+        permissoes:
+          type: array
+          uniqueItems: true
+          description: Substituem as permissões atuais do grupo
+          items:
+            $ref: '#/components/schemas/Permissao'
+          example: [PACIENTE_CONSULTAR, DISPONIBILIDADE_CONSULTAR]
+    GrupoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        nome:
+          type: string
+        descricao:
+          type: string
+        padrao:
+          type: boolean
+          description: Grupo de cargo ou MEDICO (criado pela migration); não pode ser removido nem renomeado
+        permissoes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permissao'
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    GrupoPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrupoResponse'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+    UsuarioAcessosRequest:
+      type: object
+      description: Substitui os grupos e as permissões avulsas do usuário; listas vazias ou omitidas tiram tudo.
+      properties:
+        grupoIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+        permissoes:
+          type: array
+          uniqueItems: true
+          description: Permissões dadas fora dos grupos
+          items:
+            $ref: '#/components/schemas/Permissao'
     SenhaPessoa:
       type: string
       format: password
@@ -2761,7 +3042,7 @@ components:
       properties:
         accessToken:
           type: string
-          description: JWT (HS256) com os claims sub (login), uid, perfil, iss, iat e exp
+          description: JWT (HS256) com os claims sub (login), uid, grupos, permissoes (efetivas), iss, iat e exp
         tokenType:
           type: string
           example: Bearer
@@ -2794,10 +3075,22 @@ components:
         login:
           type: string
           example: '12345678901'
-        perfil:
-          $ref: '#/components/schemas/Perfil'
         ativo:
           type: boolean
+        grupos:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrupoResumo'
+        permissoes:
+          type: array
+          description: Permissões avulsas (fora dos grupos)
+          items:
+            $ref: '#/components/schemas/Permissao'
+        permissoesEfetivas:
+          type: array
+          description: Grupos + avulsas. É o que vale no token (a partir do próximo login, se mudou)
+          items:
+            $ref: '#/components/schemas/Permissao'
         dataCriacao:
           type: string
           format: date-time
@@ -2941,7 +3234,7 @@ components:
     Cargo:
       type: string
       enum: [RECEPCIONISTA, ESTOQUISTA, RESPONSAVEL_FINANCEIRO, ADMINISTRADOR]
-      description: Define o nível de acesso (ADMINISTRADOR → ADMIN; demais → FUNCIONARIO)
+      description: Cargo do funcionário. Define o grupo de acesso padrão (grupo com o mesmo nome)
     TipoSala:
       type: string
       enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO]

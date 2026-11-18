@@ -1,5 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.config;
 
+import br.edu.imepac.clinicalapi.administrativo.entities.Permissao;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -8,6 +9,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,8 +32,10 @@ import java.nio.charset.StandardCharsets;
  * Segurança do ms-administrativo (stateless, sem sessão):
  * <ul>
  *   <li>{@code POST /auth/login} troca login/senha por um JWT (HS256) assinado por este serviço;</li>
- *   <li>as demais rotas exigem {@code Authorization: Bearer <token>}; o claim "perfil" vira ROLE_&lt;perfil&gt;;</li>
- *   <li>outros microserviços (ex.: ms-agendamento) se autenticam com o header {@code X-Api-Key} (ROLE_SERVICO).</li>
+ *   <li>as demais rotas exigem {@code Authorization: Bearer <token>}; cada permissão do claim "permissoes"
+ *       (RBAC: grupos do usuário + permissões avulsas) vira uma authority;</li>
+ *   <li>outros microserviços (ex.: ms-agendamento) se autenticam com o header {@code X-Api-Key} e recebem
+ *       as permissões de {@link Permissao#DO_SERVICO}.</li>
  * </ul>
  * Contrato: static/contract/openapi-administrativo.yaml (seção "Autenticação").
  */
@@ -40,7 +44,8 @@ import java.nio.charset.StandardCharsets;
 @EnableConfigurationProperties(SegurancaProperties.class)
 public class SecurityConfig {
 
-    public static final String CLAIM_PERFIL = "perfil";
+    public static final String CLAIM_PERMISSOES = "permissoes";
+    public static final String CLAIM_GRUPOS = "grupos";
     public static final String CLAIM_USUARIO_ID = "uid";
 
     @Bean
@@ -58,35 +63,35 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/contract/**").permitAll()
                         // Qualquer usuário autenticado: dados do próprio usuário e troca de senha
                         .requestMatchers("/auth/**").authenticated()
-                        // Somente administrador
-                        .requestMatchers("/usuarios/**", "/funcionarios/**").hasRole("ADMIN")
+                        // RBAC: usuários, grupos e permissões
+                        .requestMatchers("/usuarios/**", "/grupos/**", "/permissoes/**")
+                        .hasAuthority(Permissao.USUARIO_GERENCIAR.name())
                         // Leituras para outros microserviços
-                        .requestMatchers("/integracao/**").hasAnyRole("SERVICO", "ADMIN")
-                        // Pacientes: equipe gerencia; médico e serviços consultam
-                        .requestMatchers(HttpMethod.GET, "/pacientes/**", "/responsaveis/**")
-                        .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
-                        // A busca é POST só para não pôr dado pessoal na URL (RNF08): é leitura
+                        .requestMatchers("/integracao/**").hasAuthority(Permissao.INTEGRACAO_CONSULTAR.name())
+                        // As buscas são POST só para não pôr dado pessoal na URL (RNF08): são leitura
+                        .requestMatchers(HttpMethod.POST, "/funcionarios/busca")
+                        .hasAuthority(Permissao.FUNCIONARIO_CONSULTAR.name())
                         .requestMatchers(HttpMethod.POST, "/pacientes/busca")
-                        .hasAnyRole("ADMIN", "FUNCIONARIO", "MEDICO", "SERVICO")
-                        .requestMatchers("/pacientes/**", "/responsaveis/**").hasAnyRole("ADMIN", "FUNCIONARIO")
-                        // Custos dos médicos: equipe e serviços (ex.: faturamento) consultam; só o admin altera
-                        .requestMatchers(HttpMethod.GET, "/custos-medicos/**").hasAnyRole("ADMIN", "FUNCIONARIO", "SERVICO")
-                        .requestMatchers("/custos-medicos/**").hasRole("ADMIN")
-                        // Disponibilidades: todos consultam (inclusive o ms-agendamento); o admin cadastra
-                        .requestMatchers(HttpMethod.GET, "/disponibilidades/**").authenticated()
-                        .requestMatchers("/disponibilidades/**").hasRole("ADMIN")
-                        // Insumos: o ms-estoque (X-Api-Key) também cadastra e altera
-                        .requestMatchers(HttpMethod.GET, "/insumos/**").authenticated()
-                        .requestMatchers("/insumos/**").hasAnyRole("ADMIN", "SERVICO")
-                        // Cadastros de apoio: todos consultam, só o administrador altera
-                        .requestMatchers(HttpMethod.GET, "/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
-                                "/procedimentos/**")
-                        .authenticated()
-                        // A busca de médicos é POST só para não pôr dado pessoal na URL (RNF08): é leitura
-                        .requestMatchers(HttpMethod.POST, "/medicos/busca").authenticated()
-                        .requestMatchers("/medicos/**", "/especialidades/**", "/convenios/**", "/salas/**",
-                                "/procedimentos/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+                        .hasAuthority(Permissao.PACIENTE_CONSULTAR.name())
+                        .requestMatchers(HttpMethod.POST, "/medicos/busca")
+                        .hasAuthority(Permissao.MEDICO_CONSULTAR.name()))
+                // Demais recursos: GET pede *_CONSULTAR; o resto (POST, PUT, PATCH, DELETE) pede *_GERENCIAR
+                .authorizeHttpRequests(auth -> {
+                    recurso(auth, Permissao.FUNCIONARIO_CONSULTAR, Permissao.FUNCIONARIO_GERENCIAR, "/funcionarios/**");
+                    // Inclui os vínculos do paciente com convênio (/pacientes/{id}/convenios)
+                    recurso(auth, Permissao.PACIENTE_CONSULTAR, Permissao.PACIENTE_GERENCIAR,
+                            "/pacientes/**", "/responsaveis/**");
+                    recurso(auth, Permissao.MEDICO_CONSULTAR, Permissao.MEDICO_GERENCIAR, "/medicos/**");
+                    recurso(auth, Permissao.ESPECIALIDADE_CONSULTAR, Permissao.ESPECIALIDADE_GERENCIAR, "/especialidades/**");
+                    recurso(auth, Permissao.CONVENIO_CONSULTAR, Permissao.CONVENIO_GERENCIAR, "/convenios/**");
+                    recurso(auth, Permissao.SALA_CONSULTAR, Permissao.SALA_GERENCIAR, "/salas/**");
+                    recurso(auth, Permissao.PROCEDIMENTO_CONSULTAR, Permissao.PROCEDIMENTO_GERENCIAR, "/procedimentos/**");
+                    recurso(auth, Permissao.INSUMO_CONSULTAR, Permissao.INSUMO_GERENCIAR, "/insumos/**");
+                    recurso(auth, Permissao.CUSTO_MEDICO_CONSULTAR, Permissao.CUSTO_MEDICO_GERENCIAR, "/custos-medicos/**");
+                    recurso(auth, Permissao.DISPONIBILIDADE_CONSULTAR, Permissao.DISPONIBILIDADE_GERENCIAR,
+                            "/disponibilidades/**");
+                    auth.anyRequest().authenticated();
+                })
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                         .authenticationEntryPoint(errorHandler)
@@ -98,11 +103,19 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** Converte o claim "perfil" (ex.: ADMIN) na authority ROLE_ADMIN. */
+    /** GET (leitura) pede a permissão de consultar; os demais métodos, a de gerenciar. */
+    private static void recurso(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth,
+            Permissao consultar, Permissao gerenciar, String... caminhos) {
+        auth.requestMatchers(HttpMethod.GET, caminhos).hasAuthority(consultar.name());
+        auth.requestMatchers(caminhos).hasAuthority(gerenciar.name());
+    }
+
+    /** Cada item do claim "permissoes" (ex.: PACIENTE_GERENCIAR) vira uma authority com o mesmo nome. */
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
-        authorities.setAuthoritiesClaimName(CLAIM_PERFIL);
-        authorities.setAuthorityPrefix("ROLE_");
+        authorities.setAuthoritiesClaimName(CLAIM_PERMISSOES);
+        authorities.setAuthorityPrefix("");
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(authorities);
         return converter;

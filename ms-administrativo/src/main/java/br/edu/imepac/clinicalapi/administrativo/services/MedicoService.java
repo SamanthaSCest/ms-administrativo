@@ -7,7 +7,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
-import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
+import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
@@ -59,7 +59,8 @@ public class MedicoService {
         // O mapper não preenche as especialidades: buscamos pelos ids informados (422 se algum não existir)
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), Set.of()));
         // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
-        medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
+        medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(),
+                usuarioService.grupoPadrao(Grupo.MEDICO)));
         log.debug("Salvando médico {}", medico.getNome());
         Medico salvo = repository.save(medico);
         eventos.criado(salvo);
@@ -69,7 +70,7 @@ public class MedicoService {
     /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
     @Transactional(readOnly = true)
     public Page<MedicoResponse> listar(Boolean ativo, Pageable pageable) {
-        return buscar(new MedicoBuscaRequest(null, null, null, null, ativo), pageable);
+        return pesquisar(new MedicoBuscaRequest(null, null, null, null, ativo), pageable);
     }
 
     /**
@@ -78,6 +79,10 @@ public class MedicoService {
      */
     @Transactional(readOnly = true)
     public Page<MedicoResponse> buscar(MedicoBuscaRequest filtro, Pageable pageable) {
+        return pesquisar(filtro, pageable);
+    }
+
+    private Page<MedicoResponse> pesquisar(MedicoBuscaRequest filtro, Pageable pageable) {
         Specification<Medico> spec = Specification.allOf(
                 Filtros.ativo(filtro.ativo()),
                 Filtros.nomeContem(filtro.nome()),
@@ -109,7 +114,7 @@ public class MedicoService {
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), medico.getEspecialidades()));
-        usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
+        usuarioService.sincronizar(medico, request.getSenha(), usuarioService.grupoPadrao(Grupo.MEDICO));
         Medico salvo = repository.save(medico);
         MedicoResponse depois = mapper.toResponse(salvo);
         eventos.atualizado(salvo, antes, depois);

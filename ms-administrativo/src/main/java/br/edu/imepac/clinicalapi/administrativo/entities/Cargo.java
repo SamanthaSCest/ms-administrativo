@@ -1,16 +1,12 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
 /**
- * Cargo do funcionário (diagrama: Enum Cargo). Define o nível de acesso do usuário:
- * ADMINISTRADOR -> perfil ADMIN; os demais -> perfil FUNCIONARIO.
+ * Cargo do funcionário (diagrama: Enum Cargo). Cada cargo tem um grupo de acesso padrão com o mesmo nome
+ * (RBAC, migration V14): o funcionário entra nele no cadastro.
  */
 public enum Cargo {
     RECEPCIONISTA,
     ESTOQUISTA,
     RESPONSAVEL_FINANCEIRO,
-    ADMINISTRADOR;
-
-    public Perfil perfil() {
-        return this == ADMINISTRADOR ? Perfil.ADMIN : Perfil.FUNCIONARIO;
-    }
+    ADMINISTRADOR
 }

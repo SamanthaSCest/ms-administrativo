@@ -18,6 +18,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -30,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Fluxo real de autenticação (sem @WithMockUser): login com o admin criado pelo AdminInicializador,
- * uso do Bearer token, regras por perfil e autenticação de serviço via X-Api-Key.
+ * uso do Bearer token, regras por permissão (RBAC) e autenticação de serviço via X-Api-Key.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -130,7 +131,8 @@ class AuthApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(7200))
-                .andExpect(jsonPath("$.usuario.perfil").value("ADMIN"))
+                .andExpect(jsonPath("$.usuario.grupos[0].nome").value("ADMINISTRADOR"))
+                .andExpect(jsonPath("$.usuario.permissoesEfetivas", hasItem("USUARIO_GERENCIAR")))
                 .andExpect(jsonPath("$.usuario.senha").doesNotExist())
                 .andReturn();
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
@@ -139,7 +141,7 @@ class AuthApiIntegrationTest {
         mockMvc.perform(get("/auth/me").header(HttpHeaders.AUTHORIZATION, bearer(json.get("accessToken").asText())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.login").value(ADMIN_LOGIN))
-                .andExpect(jsonPath("$.perfil").value("ADMIN"));
+                .andExpect(jsonPath("$.grupos[0].nome").value("ADMINISTRADOR"));
     }
 
     @Test
@@ -193,13 +195,13 @@ class AuthApiIntegrationTest {
                 .andExpect(jsonPath("$.cargo").value("RECEPCIONISTA"))
                 .andExpect(jsonPath("$.dataAdmissao").value("2024-02-01"))
                 .andExpect(jsonPath("$.usuario.login").value("11122233396"))
-                .andExpect(jsonPath("$.usuario.perfil").value("FUNCIONARIO"))
+                .andExpect(jsonPath("$.usuario.grupos[0].nome").value("RECEPCIONISTA"))
                 .andReturn();
         long id = objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asLong();
 
         String funcionario = token("11122233396", "funcSenha123");
 
-        // Funcionário gerencia pacientes...
+        // Recepcionista (grupo do cargo) gerencia pacientes...
         criarPaciente(funcionario, "98765432100");
         // ...mas não cadastra funcionários nem médicos
         mockMvc.perform(get("/funcionarios").header(HttpHeaders.AUTHORIZATION, bearer(funcionario)))
@@ -247,7 +249,7 @@ class AuthApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(funcionarioJson("55566677720", "F-002", "ADMINISTRADOR")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.usuario.perfil").value("ADMIN"));
+                .andExpect(jsonPath("$.usuario.grupos[0].nome").value("ADMINISTRADOR"));
 
         String novoAdmin = token("55566677720", "funcSenha123");
         mockMvc.perform(get("/usuarios").header(HttpHeaders.AUTHORIZATION, bearer(novoAdmin)))
@@ -327,7 +329,7 @@ class AuthApiIntegrationTest {
     }
 
     @Test
-    void medico_cadastradoRecebeUsuarioComPerfilMedico() throws Exception {
+    void medico_cadastradoEntraNoGrupoMedico() throws Exception {
         String admin = token(ADMIN_LOGIN, ADMIN_SENHA);
         long espId = criarEspecialidade(admin);
 
@@ -336,7 +338,7 @@ class AuthApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(medicoJson(espId, "11145678920")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.usuario.perfil").value("MEDICO"));
+                .andExpect(jsonPath("$.usuario.grupos[0].nome").value("MEDICO"));
 
         String medico = token("11145678920", "medicoSenha1");
         // Médico consulta pacientes, mas não cadastra

@@ -12,7 +12,7 @@ import java.time.LocalDate;
 
 /**
  * DTO de ENTRADA do funcionário: dados pessoais (PessoaRequest) + profissionais.
- * O cargo define o nível de acesso: ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO.
+ * O cargo define o grupo de acesso padrão do usuário (RBAC): o grupo com o mesmo nome do cargo.
  */
 @Getter
 @Setter

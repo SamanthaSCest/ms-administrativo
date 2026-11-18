@@ -14,7 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -25,7 +26,6 @@ import java.time.temporal.TemporalAdjusters;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class EntidadeBaseApiTest {
 
     private static final String UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -211,7 +211,7 @@ class EntidadeBaseApiTest {
     void permissoes_seguemAsRegrasDeEscritaDeCadaRecurso() throws Exception {
         long paciente = id(criar("/pacientes", "{\"nome\":\"Ana\",\"cpf\":\"12345678909\",\"dataNascimento\":\"1990-01-01\"}"));
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
-        var recepcao = user("recepcao").roles("FUNCIONARIO");
+        var recepcao = Acessos.grupo("recepcao", "RECEPCIONISTA");
 
         // Funcionário gerencia pacientes, mas não médicos
         mockMvc.perform(patch("/pacientes/{id}/status", paciente).with(recepcao)
@@ -230,7 +230,7 @@ class EntidadeBaseApiTest {
                  "cargo":"ADMINISTRADOR","dataAdmissao":"2024-01-01","senha":"senhaForte1"}
                 """));
 
-        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(user("11122233396").roles("ADMIN"))
+        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(Acessos.grupo("11122233396", "ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ativo\":false}"))
                 .andExpect(status().isUnprocessableEntity());
 

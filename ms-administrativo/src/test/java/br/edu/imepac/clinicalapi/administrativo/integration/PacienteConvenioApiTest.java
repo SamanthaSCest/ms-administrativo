@@ -16,7 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -29,7 +30,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -43,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class PacienteConvenioApiTest {
 
     @Autowired
@@ -124,7 +124,7 @@ class PacienteConvenioApiTest {
     }
 
     private ResultActions vigentes(String data) throws Exception {
-        var req = get("/integracao/pacientes/{id}/convenios/vigentes", paciente).with(user("agenda").roles("SERVICO"));
+        var req = get("/integracao/pacientes/{id}/convenios/vigentes", paciente).with(Acessos.grupo("agenda", "SERVICO"));
         return mockMvc.perform(data == null ? req : req.param("data", data));
     }
 
@@ -302,16 +302,16 @@ class PacienteConvenioApiTest {
     @Test
     void rf24_pacienteInexistente_retorna404_eSoServicoOuAdminAcessa() throws Exception {
         mockMvc.perform(get("/integracao/pacientes/{id}/convenios/vigentes", 999999)
-                .with(user("agenda").roles("SERVICO"))).andExpect(status().isNotFound());
+                .with(Acessos.grupo("agenda", "SERVICO"))).andExpect(status().isNotFound());
         mockMvc.perform(get("/integracao/pacientes/{id}/convenios/vigentes", paciente)
-                .with(user("recepcao").roles("FUNCIONARIO"))).andExpect(status().isForbidden());
+                .with(Acessos.grupo("recepcao", "RECEPCIONISTA"))).andExpect(status().isForbidden());
     }
 
     @Test
     void medicoConsulta_masNaoVincula() throws Exception {
-        mockMvc.perform(get("/pacientes/{id}/convenios", paciente).with(user("dr").roles("MEDICO")))
+        mockMvc.perform(get("/pacientes/{id}/convenios", paciente).with(Acessos.grupo("dr", "MEDICO")))
                 .andExpect(status().isOk());
-        mockMvc.perform(post("/pacientes/{id}/convenios", paciente).with(user("dr").roles("MEDICO"))
+        mockMvc.perform(post("/pacientes/{id}/convenios", paciente).with(Acessos.grupo("dr", "MEDICO"))
                         .contentType(MediaType.APPLICATION_JSON).content(vinculoJson(unimed, "1", null)))
                 .andExpect(status().isForbidden());
     }

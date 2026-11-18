@@ -10,14 +10,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.hamcrest.Matchers.hasSize;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "recepcao", roles = "FUNCIONARIO")
+@ComGrupo(username = "recepcao", value = "RECEPCIONISTA")
 class PacienteBuscaApiTest {
 
     @Autowired
@@ -128,7 +128,7 @@ class PacienteBuscaApiTest {
     @Test
     void busca_medicoPodeConsultar() throws Exception {
         // A busca é leitura: médico consulta, mesmo sendo POST
-        mockMvc.perform(post("/pacientes/busca").with(user("dr").roles("MEDICO"))
+        mockMvc.perform(post("/pacientes/busca").with(Acessos.grupo("dr", "MEDICO"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nome\":\"joão\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)));
