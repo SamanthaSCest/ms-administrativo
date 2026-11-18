@@ -8,3 +8,6 @@ spring:
 clients:
   administrativo:
     url: http://localhost:65535
+  # Sem Keycloak nos testes: as chamadas ao ms-administrativo (que falham de propósito) vão sem token
+  keycloak:
+    token-uri: ""

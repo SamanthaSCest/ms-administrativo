@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 
 /**
  * Insumo usado em procedimentos (luva, seringa...). Cadastrado aqui e mantido também pelo ms-estoque
- * via API (X-Api-Key), por exemplo para atualizar o custo unitário.
+ * via API (token client credentials do Keycloak), por exemplo para atualizar o custo unitário.
  */
 @Getter
 @Setter

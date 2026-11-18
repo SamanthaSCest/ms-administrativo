@@ -88,7 +88,7 @@ public class FuncionarioController {
     private static void exigirGestaoDeAcessosSeHouverGrupos(FuncionarioRequest request, Authentication authentication) {
         boolean podeGerenciarAcessos = authentication.getAuthorities().stream()
                 .anyMatch(a -> Permissao.USUARIO_GERENCIAR.name().equals(a.getAuthority()));
-        if (request.getGrupoIds() != null && !podeGerenciarAcessos) {
+        if (request.getGrupos() != null && !podeGerenciarAcessos) {
             throw new NegocioException(HttpStatus.FORBIDDEN, "ADM-FUN-001",
                     "Escolher grupos de acesso exige a permissão USUARIO_GERENCIAR");
         }

@@ -5,7 +5,6 @@ import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Cargo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
-import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
 import br.edu.imepac.clinicalapi.administrativo.mapper.FuncionarioMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
@@ -22,8 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Cadastro de funcionários: unicidade de CPF/matrícula e criação do usuário de acesso no grupo padrão
- * do cargo (RBAC). Mudar o cargo troca esse grupo; os demais acessos ficam como o administrador definiu.
+ * Cadastro de funcionários: unicidade de CPF/matrícula e criação do usuário de acesso no Keycloak, no grupo
+ * com o nome do cargo. Mudar o cargo troca esse grupo; os demais grupos ficam como o administrador definiu.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,15 +45,12 @@ public class FuncionarioService {
             throw new ConflictException("Já existe funcionário com a matrícula: " + request.getMatricula());
         }
         Funcionario funcionario = mapper.toEntity(request);
-        // Usuário de acesso (login = CPF) no grupo padrão do cargo (+ os grupos extras informados)
-        Grupo grupoDoCargo = grupo(request.getCargo());
-        funcionario.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), grupoDoCargo));
-        if (request.getGrupoIds() != null) {
-            usuarioService.definirGrupos(funcionario.getUsuario(), grupoDoCargo, request.getGrupoIds());
-        }
+        // Usuário de acesso no Keycloak (login = CPF) no grupo do cargo + os grupos extras informados
+        funcionario.setUsuario(usuarioService.novoUsuario(funcionario, request.getSenha(),
+                UsuarioService.comGrupoDoCargo(request.getCargo().name(), request.getGrupos())));
         Funcionario salvo = repository.save(funcionario);
         eventos.criado(salvo);
-        return mapper.toResponse(salvo);
+        return comGrupos(salvo);
     }
 
     /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
@@ -85,7 +81,7 @@ public class FuncionarioService {
 
     @Transactional(readOnly = true)
     public FuncionarioResponse buscar(Long id) {
-        return mapper.toResponse(buscarEntidade(id));
+        return comGrupos(buscarEntidade(id));
     }
 
     @Transactional
@@ -101,18 +97,21 @@ public class FuncionarioService {
         }
         var antes = eventos.retrato(mapper.toResponse(funcionario));
         mapper.updateEntity(request, funcionario);
-        Grupo grupoNovo = grupo(request.getCargo());
-        usuarioService.sincronizar(funcionario, request.getSenha(), grupoNovo);
-        if (request.getGrupoIds() != null && funcionario.getUsuario() != null) {
+        String grupoNovo = request.getCargo().name();
+        boolean jaTinhaUsuarioNoKeycloak = funcionario.getUsuario() != null
+                && funcionario.getUsuario().getKeycloakId() != null;
+        usuarioService.sincronizar(funcionario, request.getSenha(),
+                UsuarioService.comGrupoDoCargo(grupoNovo, request.getGrupos()));
+        if (jaTinhaUsuarioNoKeycloak && request.getGrupos() != null) {
             // Grupos informados: o do cargo (novo) + os extras, no lugar dos atuais
-            usuarioService.definirGrupos(funcionario.getUsuario(), grupoNovo, request.getGrupoIds());
-        } else if (cargoAnterior != request.getCargo()) {
-            usuarioService.trocarGrupo(funcionario.getUsuario(), grupo(cargoAnterior), grupoNovo);
+            usuarioService.definirGrupos(funcionario.getUsuario(), grupoNovo, request.getGrupos());
+        } else if (jaTinhaUsuarioNoKeycloak && cargoAnterior != request.getCargo()) {
+            usuarioService.trocarGrupo(funcionario.getUsuario(), cargoAnterior.name(), grupoNovo);
         }
         Funcionario salvo = repository.save(funcionario);
         FuncionarioResponse depois = mapper.toResponse(salvo);
         eventos.atualizado(salvo, antes, depois);
-        return depois;
+        return comGrupos(salvo);
     }
 
     @Transactional
@@ -120,13 +119,18 @@ public class FuncionarioService {
         log.info("Removendo funcionário {}", id);
         Funcionario funcionario = buscarEntidade(id);
         eventos.removido(funcionario);
-        // O usuário de acesso é removido em cascata (usuario: orphanRemoval)
+        // O vínculo local sai em cascata (usuario: orphanRemoval); o usuário do Keycloak, depois do commit
+        usuarioService.removerDepoisDoCommit(funcionario.getUsuario());
         repository.delete(funcionario);
     }
 
-    /** Cada cargo tem um grupo padrão com o mesmo nome (migration V14). */
-    private Grupo grupo(Cargo cargo) {
-        return usuarioService.grupoPadrao(cargo.name());
+    /** Detalhe: o usuário vem com os grupos atuais do Keycloak. */
+    private FuncionarioResponse comGrupos(Funcionario funcionario) {
+        FuncionarioResponse r = mapper.toResponse(funcionario);
+        if (r.getUsuario() != null) {
+            r.getUsuario().setGrupos(usuarioService.grupos(funcionario.getUsuario()));
+        }
+        return r;
     }
 
     private Funcionario buscarEntidade(Long id) {

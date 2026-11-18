@@ -1,49 +1,59 @@
 package br.edu.imepac.clinicalapi.administrativo.support;
 
-import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
-import br.edu.imepac.clinicalapi.administrativo.entities.Permissao;
-import br.edu.imepac.clinicalapi.administrativo.repositories.GrupoRepository;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.web.context.support.WebApplicationContextUtils;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Stream;
+import java.util.Map;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 
 /**
- * Usuário de teste com as permissões reais de um grupo, por requisição:
+ * Usuário de teste autenticado como se viesse do Keycloak, com as roles reais de um grupo
+ * (keycloak/realm-clinical.json), por requisição:
  * {@code mockMvc.perform(get(...).with(Acessos.grupo("dr", "MEDICO")))}.
- * Substitui o {@code user(...).roles(...)} desde o RBAC.
+ * {@link #SERVICO} simula outro microserviço (client credentials do ms-agendamento).
  */
 public final class Acessos {
 
-    public static final String SERVICO = "SERVICO";
+    public static final String SERVICO = RealmClinical.SERVICO;
 
     private Acessos() {
     }
 
     public static RequestPostProcessor grupo(String username, String grupo) {
-        return request -> {
-            GrupoRepository repository = WebApplicationContextUtils
-                    .getRequiredWebApplicationContext(request.getServletContext()).getBean(GrupoRepository.class);
-            return user(username).authorities(authorities(repository, grupo)).postProcessRequest(request);
-        };
+        return authentication(token(username, grupo));
     }
 
-    static Collection<GrantedAuthority> authorities(GrupoRepository repository, String grupo) {
-        Stream<String> nomes;
-        if (SERVICO.equals(grupo)) {
-            nomes = Stream.concat(Stream.of("ROLE_SERVICO"), Permissao.DO_SERVICO.stream().map(Enum::name));
-        } else {
-            Grupo encontrado = repository.findByNome(grupo)
-                    .orElseThrow(() -> new IllegalArgumentException("Grupo não existe no banco de teste: " + grupo));
-            nomes = encontrado.getPermissoes().stream().map(Enum::name);
-        }
-        List<GrantedAuthority> lista = nomes.map(n -> (GrantedAuthority) new SimpleGrantedAuthority(n)).toList();
-        return lista;
+    /** Usuário com roles avulsas (fora dos grupos do realm), ex.: um grupo criado no Keycloak só para o teste. */
+    public static RequestPostProcessor roles(String username, String... roles) {
+        return authentication(token(username, List.of(), List.of(roles)));
+    }
+
+    /** Mesmo formato que o SecurityConfig produz para um token do Keycloak (nome = preferred_username). */
+    static JwtAuthenticationToken token(String username, String grupo) {
+        return token(username, SERVICO.equals(grupo) ? List.of() : List.of(grupo), RealmClinical.roles(grupo));
+    }
+
+    private static JwtAuthenticationToken token(String username, List<String> grupos, List<String> roles) {
+        Jwt jwt = Jwt.withTokenValue("token-de-teste")
+                .header("alg", "RS256")
+                .subject(username)
+                .claim("preferred_username", username)
+                .claim("groups", grupos)
+                .claim("resource_access", Map.of(RealmClinical.CLIENT, Map.of("roles", roles)))
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        return new JwtAuthenticationToken(jwt, authorities(roles), username);
+    }
+
+    private static Collection<GrantedAuthority> authorities(List<String> roles) {
+        return roles.stream().map(r -> (GrantedAuthority) new SimpleGrantedAuthority(r)).toList();
     }
 }

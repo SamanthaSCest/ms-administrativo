@@ -42,21 +42,22 @@ springdoc:
     url: /contract/openapi-administrativo.yaml
     path: /swagger-ui.html
     persist-authorization: true  # mantém o token do botão "Authorize" ao recarregar a página
+    # Botão "Authorize" faz login no Keycloak (authorization code + PKCE) com o client público clinical-web
+    oauth:
+      client-id: clinical-web
+      use-pkce-with-authorization-code-grant: true
 
-# Autenticação (ver config/SecurityConfig). Em produção, SEMPRE defina as variáveis de ambiente.
-seguranca:
-  jwt:
-    # Segredo HMAC (HS256) com no mínimo 32 caracteres
-    segredo: ${JWT_SECRET:dev-only-troque-este-segredo-jwt-com-32+-caracteres}
-    emissor: ms-administrativo
-    expiracao: ${JWT_EXPIRACAO:2h}
-  # Administrador criado na inicialização, se ainda não existir um usuário com este login
-  admin:
-    login: ${ADMIN_LOGIN:admin}
-    senha: ${ADMIN_PASSWORD:admin12345}
-  # Chave enviada no header X-Api-Key por outros microserviços (ex.: ms-agendamento). Vazia = desligado
-  integracao:
-    api-key: ${INTEGRACAO_API_KEY:dev-integracao-key}
+# Autenticação pelo Keycloak (ver config/SecurityConfig e keycloak/realm-clinical.json).
+# Em produção, SEMPRE defina as variáveis de ambiente.
+keycloak:
+  # Endereço que ESTE serviço usa para falar com o Keycloak (chaves públicas e Admin API)
+  url: ${KEYCLOAK_URL:http://localhost:8180}
+  realm: ${KEYCLOAK_REALM:clinical}
+  # Valor esperado no claim "iss": o endereço público do Keycloak (KC_HOSTNAME) + /realms/<realm>
+  issuer: ${KEYCLOAK_ISSUER:http://localhost:8180/realms/clinical}
+  # Client dono das roles de permissão; a service account dele cria os usuários pela Admin API
+  client-id: ${KEYCLOAK_CLIENT_ID:ms-administrativo}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET:dev-ms-administrativo-secret}
 
 # Níveis de log (TRACE < DEBUG < INFO < WARN < ERROR). Mude para DEBUG para ver mais detalhes
 # do nosso código, ex.: LOGGING_LEVEL_BR_EDU_IMEPAC=DEBUG

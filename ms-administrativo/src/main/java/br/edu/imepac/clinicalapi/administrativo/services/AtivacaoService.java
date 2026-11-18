@@ -30,7 +30,7 @@ import java.util.Map;
 /**
  * Ativa/inativa qualquer cadastro que estende EntidadeBase (inativar() / reativar()).
  * Inativar não apaga: o registro continua consultável, mas não pode ser usado em novos vínculos.
- * Para médico e funcionário, o usuário de acesso acompanha o status (inativo não faz login).
+ * Para médico e funcionário, o usuário de acesso acompanha o status, também no Keycloak (inativo não faz login).
  */
 @Service
 public class AtivacaoService {
@@ -41,14 +41,17 @@ public class AtivacaoService {
     private final Map<String, JpaRepository<? extends EntidadeBase, Long>> repositorios;
     private final EventoService eventos;
     private final MedicoRepository medicos;
+    private final UsuarioService usuarioService;
 
     public AtivacaoService(EspecialidadeRepository especialidades, MedicoRepository medicos,
                            PacienteRepository pacientes, FuncionarioRepository funcionarios,
                            ConvenioRepository convenios, SalaRepository salas,
                            ResponsavelLegalRepository responsaveis, InsumoRepository insumos,
                            ProcedimentoRepository procedimentos, CustoMedicoRepository custos,
-                           DisponibilidadeMedicaRepository disponibilidades, EventoService eventos) {
+                           DisponibilidadeMedicaRepository disponibilidades, EventoService eventos,
+                           UsuarioService usuarioService) {
         this.eventos = eventos;
+        this.usuarioService = usuarioService;
         this.medicos = medicos;
         this.repositorios = Map.ofEntries(
                 Map.entry("especialidades", especialidades),
@@ -78,7 +81,7 @@ public class AtivacaoService {
             if (!ativo && pessoa.getUsuario().getLogin().equals(loginAutenticado)) {
                 throw new BusinessRuleException("Não é possível inativar o próprio cadastro");
             }
-            pessoa.getUsuario().setAtivo(ativo);
+            usuarioService.definirAtivo(pessoa.getUsuario(), ativo);
         }
         boolean mudou = entidade.isAtivo() != ativo;
         if (mudou && !ativo && entidade instanceof Especialidade) {

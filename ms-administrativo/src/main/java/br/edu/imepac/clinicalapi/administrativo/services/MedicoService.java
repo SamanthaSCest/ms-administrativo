@@ -7,7 +7,6 @@ import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
-import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
@@ -38,6 +37,9 @@ public class MedicoService {
     // Use sempre placeholders {} em vez de concatenar strings.
     private static final Logger log = LoggerFactory.getLogger(MedicoService.class);
 
+    /** Grupo do Keycloak em que todo médico entra (keycloak/realm-clinical.json). */
+    static final String GRUPO_MEDICO = "MEDICO";
+
     private final MedicoRepository repository;
     private final EspecialidadeRepository especialidadeRepository;
     private final MedicoMapper mapper;
@@ -58,13 +60,12 @@ public class MedicoService {
         Medico medico = mapper.toEntity(request);
         // O mapper não preenche as especialidades: buscamos pelos ids informados (422 se algum não existir)
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), Set.of()));
-        // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
-        medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(),
-                usuarioService.grupoPadrao(Grupo.MEDICO)));
+        // Usuário de acesso no Keycloak (login = CPF, grupo MEDICO); o vínculo é salvo em cascata com o médico
+        medico.setUsuario(usuarioService.novoUsuario(medico, request.getSenha(), Set.of(GRUPO_MEDICO)));
         log.debug("Salvando médico {}", medico.getNome());
         Medico salvo = repository.save(medico);
         eventos.criado(salvo);
-        return mapper.toResponse(salvo);
+        return comGrupos(salvo);
     }
 
     /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
@@ -97,7 +98,7 @@ public class MedicoService {
 
     @Transactional(readOnly = true)
     public MedicoResponse buscar(Long id) {
-        return mapper.toResponse(buscarEntidade(id));
+        return comGrupos(buscarEntidade(id));
     }
 
     @Transactional
@@ -114,11 +115,11 @@ public class MedicoService {
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), medico.getEspecialidades()));
-        usuarioService.sincronizar(medico, request.getSenha(), usuarioService.grupoPadrao(Grupo.MEDICO));
+        usuarioService.sincronizar(medico, request.getSenha(), Set.of(GRUPO_MEDICO));
         Medico salvo = repository.save(medico);
         MedicoResponse depois = mapper.toResponse(salvo);
         eventos.atualizado(salvo, antes, depois);
-        return depois;
+        return comGrupos(salvo);
     }
 
     @Transactional
@@ -127,6 +128,7 @@ public class MedicoService {
         Medico medico = buscarEntidade(id);
         // Custos e disponibilidades saem junto (ON DELETE CASCADE); o evento medico.removido cobre os três
         eventos.removido(medico);
+        usuarioService.removerDepoisDoCommit(medico.getUsuario());
         repository.delete(medico);
     }
 
@@ -168,5 +170,14 @@ public class MedicoService {
             especialidades.add(especialidade);
         }
         return especialidades;
+    }
+
+    /** Detalhe: o usuário vem com os grupos atuais do Keycloak. */
+    private MedicoResponse comGrupos(Medico medico) {
+        MedicoResponse r = mapper.toResponse(medico);
+        if (r.getUsuario() != null) {
+            r.getUsuario().setGrupos(usuarioService.grupos(medico.getUsuario()));
+        }
+        return r;
     }
 }

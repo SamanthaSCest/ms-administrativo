@@ -20,7 +20,7 @@ import java.math.BigDecimal;
 
 /**
  * Insumos: código único; não remove insumo usado em procedimento.
- * Também usado pelo ms-estoque (X-Api-Key), que pode cadastrar, alterar e atualizar o custo.
+ * Também usado por outro microserviço (client credentials), que pode cadastrar, alterar e atualizar o custo.
  */
 @Service
 @RequiredArgsConstructor
