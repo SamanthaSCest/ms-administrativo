@@ -13,7 +13,7 @@ public abstract class ColaboradorRequest extends PessoaRequest {
 
     /**
      * Senha de acesso (o login é o CPF). Obrigatória no cadastro; na atualização, se informada, troca a senha.
-     * Só é gravada como hash BCrypt (limite de 72 bytes do algoritmo).
+     * Vai só para o Keycloak (aqui não é guardada); as regras de senha do realm também valem.
      */
     @NotBlank(groups = OnCreate.class, message = "é obrigatório")
     @Size(min = 8, max = 72, message = "deve ter entre 8 e 72 caracteres")

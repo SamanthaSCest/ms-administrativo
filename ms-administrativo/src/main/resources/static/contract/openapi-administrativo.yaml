@@ -12,35 +12,54 @@ info:
 
     ## Autenticação
 
-    Só a equipe da clínica acessa o sistema: **funcionários** (nível `ADMIN` ou `FUNCIONARIO`) e **médicos** (`MEDICO`).
-    Pacientes são apenas registros e **não têm login**.
+    Só a equipe da clínica acessa o sistema: **funcionários** e **médicos**. Pacientes são apenas registros e
+    **não têm login**.
 
-    1. Faça `POST /auth/login` com `login` e `senha`. Funcionários e médicos usam o **CPF** como login;
-       o administrador inicial é configurado por `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local: `admin`/`admin12345`).
-    2. Clique em **Authorize** e cole o `accessToken` em `bearerAuth` (sem o prefixo "Bearer").
-    3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
-       perfil sem permissão: **403** (ambos no formato `ProblemDetail`).
+    Login, logout e troca de senha são feitos no **Keycloak** (realm `clinical`, local: `http://localhost:8180`).
+    Funcionários e médicos usam o **CPF** como login; o administrador inicial é o usuário `admin` do realm (senha
+    definida em `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` no `.env`).
 
-    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`): leitura em geral e, para o
-    ms-estoque, também escrita em `/insumos`.
+    1. No Swagger UI, clique em **Authorize** e use `keycloak` (login na tela do Keycloak, client `clinical-web`).
+       Alternativa em desenvolvimento: pegue um token com
+       `curl -d grant_type=password -d client_id=clinical-web -d username=admin -d password=<senha do admin>
+       http://localhost:8180/realms/clinical/protocol/openid-connect/token` e cole o `access_token` em `bearerAuth`.
+    2. As rotas exigem o header `Authorization: Bearer <token do Keycloak>`. Sem token ou com token
+       inválido/expirado: **401**; sem a permissão exigida: **403** (ambos no formato `ProblemDetail`).
 
-    O nível de acesso do funcionário vem do **cargo**: `ADMINISTRADOR` → `ADMIN`; os demais → `FUNCIONARIO`.
+    ## Controle de acesso (RBAC)
 
-    | Recurso | ADMIN | FUNCIONARIO | MEDICO | Serviço (X-Api-Key) |
-    |---|---|---|---|---|
-    | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | — |
-    | `/usuarios`, `/funcionarios` | ✔ | — | — | — |
-    | Especialidades, médicos, convênios, salas, procedimentos (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Especialidades, médicos, convênios, salas, procedimentos (escrita) | ✔ | — | — | — |
-    | Pacientes e responsáveis legais (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Pacientes e responsáveis legais (escrita) | ✔ | ✔ | — | — |
-    | Insumos (leitura) | ✔ | ✔ | ✔ | ✔ |
-    | Insumos (escrita) | ✔ | — | — | ✔ (ms-estoque) |
-    | Custos dos médicos (leitura) | ✔ | ✔ | — | ✔ |
-    | Custos dos médicos (escrita) | ✔ | — | — | — |
-    | Disponibilidades (leitura, inclusive `/agenda`) | ✔ | ✔ | ✔ | ✔ |
-    | Disponibilidades (escrita) | ✔ | — | — | — |
-    | `/integracao/**` | ✔ | — | — | ✔ |
+    O acesso é por **permissão**: cada permissão é uma *client role* do client `ms-administrativo` no Keycloak
+    (claim `resource_access.ms-administrativo.roles`). Convenção: `<RECURSO>_CONSULTAR` libera as leituras (GET e as
+    buscas por POST); `<RECURSO>_GERENCIAR` libera cadastrar, alterar, ativar/inativar e remover.
+
+    - Os usuários recebem as roles pelos **grupos do Keycloak**. Grupos e as roles de cada um são administrados no
+      Keycloak (o realm versionado fica em `keycloak/realm-clinical.json`).
+    - No cadastro, o funcionário ganha um usuário no Keycloak no **grupo do seu cargo** (mesmo nome do `Cargo`) e o
+      médico no grupo `MEDICO`. Mudar o cargo troca esse grupo; os demais continuam.
+    - As roles vão no token: mudanças valem **a partir do próximo token** (no máximo 15 min, ou novo login).
+    - `GET /auth/me` devolve `grupos` e `permissoes` do token, para o front montar menus e telas.
+
+    Outros microserviços usam **client credentials** com o próprio client no Keycloak (ex.: `ms-agendamento`): a
+    service account tem leitura dos cadastros, `/integracao` e escrita em `/insumos`.
+
+    Grupos padrão (**G** = consulta e gerencia; **C** = só consulta):
+
+    | Recurso | ADMINISTRADOR | RECEPCIONISTA | ESTOQUISTA | RESPONSAVEL_FINANCEIRO | MEDICO | Serviço |
+    |---|---|---|---|---|---|---|
+    | `/auth/me` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+    | Usuários e grupos | G | — | — | — | — | — |
+    | Funcionários | G | — | — | — | — | — |
+    | Pacientes, responsáveis e convênios do paciente | G | G | — | C | C | C |
+    | Médicos e especialidades | G | C | — | C | C | C |
+    | Convênios | G | C | — | C | C | C |
+    | Salas | G | C | C | — | C | C |
+    | Procedimentos | G | C | C | C | C | C |
+    | Insumos | G | — | G | C | C | G |
+    | Custos dos médicos | G | C | — | G | — | C |
+    | Disponibilidades (inclusive `/agenda`) | G | C | — | — | C | C |
+    | `/integracao/**` | ✔ | — | — | — | — | ✔ |
+
+    O RECEPCIONISTA cobre atendimento e agendamento (cadastra pacientes e consulta médicos e disponibilidades).
 servers:
   - url: http://localhost:8081
     description: Direto no microserviço
@@ -48,11 +67,13 @@ servers:
     description: Via API Gateway
 tags:
   - name: Autenticação
-    description: Login (JWT), dados do usuário logado e troca de senha
+    description: Dados do usuário logado (login e senha são do Keycloak)
   - name: Usuários
-    description: Gestão dos usuários de acesso (somente ADMIN)
+    description: Usuários de acesso de médicos e funcionários, espelhados no Keycloak (USUARIO_GERENCIAR)
+  - name: Grupos
+    description: Grupos de acesso do Keycloak (USUARIO_GERENCIAR)
   - name: Funcionários
-    description: Cadastro da equipe da clínica com dados pessoais e profissionais (somente ADMIN)
+    description: Cadastro da equipe da clínica com dados pessoais e profissionais
   - name: Especialidades
   - name: Médicos
   - name: Pacientes
@@ -61,51 +82,29 @@ tags:
   - name: Convênios
   - name: Salas
   - name: Insumos
-    description: Mantidos também pelo ms-estoque (X-Api-Key)
+    description: Mantidos também por outros microserviços (client credentials)
   - name: Procedimentos
-    description: Procedimentos (código TUSS) e os insumos que consomem
+    description: Procedimentos e exames (código TUSS, campo tipo) e os insumos que consomem
   - name: Custos dos médicos
     description: Valor de consulta (por especialidade) ou de procedimento, com vigência
   - name: Disponibilidades
-    description: Horários de atendimento dos médicos, cadastrados pelo ADMIN
+    description: Horários de atendimento dos médicos (DISPONIBILIDADE_GERENCIAR para cadastrar)
   - name: Ativação
     description: Inativar/reativar cadastros (EntidadeBase) sem apagá-los
   - name: Integração
     description: Leituras para outros microserviços (somente leitura, CPF mascarado)
 
-# Por padrão toda operação exige Bearer token; exceções declaram "security" próprio
+# Por padrão toda operação exige token do Keycloak (pelo fluxo OAuth2 ou colado como Bearer)
 security:
+  - keycloak: []
   - bearerAuth: []
 
 paths:
-  /auth/login:
-    post:
-      tags: [Autenticação]
-      summary: Autentica e devolve um token JWT
-      description: Rota pública. A mesma resposta 401 é dada para login inexistente, senha errada ou usuário inativo.
-      operationId: login
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Autenticado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /auth/me:
     get:
       tags: [Autenticação]
       summary: Dados do usuário dono do token
+      description: Lido do próprio token do Keycloak (login, nome, grupos e permissões), sem consultar o banco.
       operationId: usuarioAutenticado
       responses:
         '200':
@@ -113,33 +112,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsuarioResponse'
+                $ref: '#/components/schemas/UsuarioLogadoResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /auth/senha:
-    put:
-      tags: [Autenticação]
-      summary: Troca a senha do usuário autenticado
-      operationId: alterarSenha
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlterarSenhaRequest'
-      responses:
-        '204':
-          description: Senha alterada
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          description: Senha atual incorreta
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
 
   /usuarios:
     get:
@@ -167,6 +142,7 @@ paths:
     get:
       tags: [Usuários]
       summary: Busca usuário por id
+      description: Inclui `grupos`, os grupos atuais do usuário no Keycloak.
       operationId: buscarUsuario
       responses:
         '200':
@@ -187,7 +163,9 @@ paths:
     patch:
       tags: [Usuários]
       summary: Ativa ou desativa o acesso de um usuário
-      description: Usuário inativo não consegue fazer login. O administrador não pode desativar a si mesmo (422).
+      description: |
+        Desativa também no Keycloak: usuário inativo não consegue fazer login. O administrador não pode desativar
+        a si mesmo (422).
       operationId: alterarStatusUsuario
       requestBody:
         required: true
@@ -212,13 +190,51 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+  /grupos:
+    get:
+      tags: [Grupos]
+      summary: Lista os nomes dos grupos de acesso do Keycloak
+      description: |
+        Para o front oferecer no campo `grupos` do cadastro de funcionário. Criar grupos e definir as permissões
+        (client roles) de cada um é feito no Keycloak.
+      operationId: listarGrupos
+      responses:
+        '200':
+          description: Nomes dos grupos, em ordem alfabética
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+              example: [ADMINISTRADOR, ESTOQUISTA, MEDICO, RECEPCIONISTA, RESPONSAVEL_FINANCEIRO]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Keycloak indisponível
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /funcionarios:
     get:
       tags: [Funcionários]
       summary: Lista funcionários (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**. O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo só sai
+        no `GET /funcionarios/{id}`. Para filtrar por nome ou CPF use `POST /funcionarios/busca`: dado pessoal não
+        vai na URL (RNF08).
       operationId: listarFuncionarios
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -237,9 +253,10 @@ paths:
       tags: [Funcionários]
       summary: Cadastra um funcionário e o seu usuário de acesso
       description: |
-        Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
-        com o nível de acesso definido pelo cargo (`ADMINISTRADOR` → `ADMIN`; demais → `FUNCIONARIO`).
-        `senha` é obrigatória.
+        Cria o funcionário com dados pessoais e profissionais e o usuário de acesso **no Keycloak** (login = CPF)
+        no grupo com o mesmo nome do `Cargo`. `senha` é obrigatória e vai só para o Keycloak. `grupos` (opcional)
+        acrescenta outros grupos do Keycloak e exige também a permissão `USUARIO_GERENCIAR` (sem ela: 403
+        `ADM-FUN-001`); grupo inexistente: 422. Login já usado: 409. Keycloak fora do ar: 503.
       operationId: criarFuncionario
       requestBody:
         required: true
@@ -268,6 +285,42 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
+  /funcionarios/busca:
+    post:
+      tags: [Funcionários]
+      summary: Busca funcionários por nome, CPF e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). Exige `FUNCIONARIO_CONSULTAR`.
+        Nome busca por parte, sem diferenciar maiúsculas; CPF completo traz no máximo um funcionário; sem `ativo`,
+        só os ativos. Nenhum resultado = página vazia (`content: []`). A paginação continua na query
+        (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarFuncionarios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FuncionarioBuscaRequest'
+            example:
+              nome: ana
+              ativo: true
+      responses:
+        '200':
+          description: Página de funcionários (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FuncionarioPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /funcionarios/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -291,7 +344,11 @@ paths:
     put:
       tags: [Funcionários]
       summary: Atualiza um funcionário
-      description: Se `senha` for informada, a senha do usuário é trocada; o login acompanha o CPF.
+      description: |
+        Se `senha` for informada, a senha do usuário é trocada no Keycloak; login (CPF), nome e e-mail também são
+        atualizados lá. Mudar o `cargo` troca o grupo do cargo e mantém os demais. Com `grupos` (exige
+        `USUARIO_GERENCIAR`, senão 403 `ADM-FUN-001`), o usuário fica com o grupo do cargo + esses grupos, no lugar
+        dos atuais (`[]` deixa só o do cargo).
       operationId: atualizarFuncionario
       requestBody:
         required: true
@@ -430,8 +487,17 @@ paths:
     get:
       tags: [Médicos]
       summary: Lista médicos (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**. O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo só sai
+        no `GET /medicos/{id}`. Para filtrar por nome, CRM ou especialidade use `POST /medicos/busca`.
       operationId: listarMedicos
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -470,17 +536,53 @@ paths:
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
 
+  /medicos/busca:
+    post:
+      tags: [Médicos]
+      summary: Busca médicos por nome, CRM, especialidade e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que o nome fique no corpo, e não na URL (RNF08). Exige
+        `MEDICO_CONSULTAR` (mesma regra do `GET /medicos`). Os filtros se combinam: nome busca por parte, sem
+        diferenciar maiúsculas; `crm` é o número completo (com `ufCrm`, no máximo um médico); `especialidadeId` traz
+        quem atende a especialidade; sem `ativo`, só os ativos. Nenhum resultado = página vazia (`content: []`).
+        A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarMedicos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicoBuscaRequest'
+            example:
+              especialidadeId: 1
+              nome: carlos
+      responses:
+        '200':
+          description: Página de médicos (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicoPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /medicos/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
     get:
       tags: [Médicos]
       summary: Busca médico por id
-      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do médico.
+      description: Também usado pelo ms-agendamento (token client credentials do Keycloak) para validar a existência do médico.
       operationId: buscarMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Médico encontrado
@@ -529,8 +631,18 @@ paths:
     get:
       tags: [Pacientes]
       summary: Lista pacientes (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos** (RF03). O CPF vem **mascarado** (`***.456.789-**`, RN20); o CPF completo
+        só sai no `GET /pacientes/{id}`. Para filtrar por nome ou CPF use `POST /pacientes/busca`: dado pessoal
+        não vai na URL (RNF08).
       operationId: listarPacientes
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -567,17 +679,55 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /pacientes/busca:
+    post:
+      tags: [Pacientes]
+      summary: Busca pacientes por nome, CPF e situação (paginado)
+      description: |
+        É uma **leitura**: usa POST só para que nome e CPF fiquem no corpo, e não na URL (RNF08). A chamada
+        exige `PACIENTE_CONSULTAR`, como a leitura de pacientes. Nome busca por parte, sem
+        diferenciar maiúsculas; CPF completo traz no máximo um paciente; sem `ativo`, só os ativos.
+        A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
+      operationId: buscarPacientes
+      security:
+        - keycloak: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/Sort'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteBuscaRequest'
+            example:
+              nome: maria
+              ativo: true
+      responses:
+        '200':
+          description: Página de pacientes (CPF mascarado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacientePage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /pacientes/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
     get:
       tags: [Pacientes]
       summary: Busca paciente por id
-      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do paciente.
+      description: |
+        Detalhe completo: dados pessoais, contato e os convênios vinculados com o número da carteirinha (`convenios`).
+        Também usado pelo ms-agendamento (token client credentials do Keycloak) para validar a existência do paciente.
       operationId: buscarPaciente
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Paciente encontrado
@@ -629,7 +779,7 @@ paths:
       description: CPF sempre mascarado (LGPD).
       operationId: integracaoBuscarPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -650,7 +800,7 @@ paths:
       description: Responde 200 mesmo quando o id não existe (existe = false), para o chamador não tratar como erro. `ativo` = false quando o paciente foi inativado.
       operationId: integracaoSituacaoPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -668,7 +818,7 @@ paths:
       summary: Contato do paciente (para notificações)
       operationId: integracaoContatoPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -679,6 +829,39 @@ paths:
                 $ref: '#/components/schemas/PacienteContato'
         '404':
           $ref: '#/components/responses/NotFound'
+  /integracao/pacientes/{id}/convenios/vigentes:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Integração]
+      summary: Convênios vigentes do paciente na data (RF24)
+      description: |
+        Vigente = vínculo ativo, convênio ativo e carteirinha válida na data (RN16). Convênio inativado não apaga
+        o vínculo, mas ele some desta lista. Sem `data`, usa hoje. Paciente inexistente: 404.
+      operationId: integracaoConveniosVigentesPaciente
+      security:
+        - keycloak: []
+        - bearerAuth: []
+      parameters:
+        - name: data
+          in: query
+          required: false
+          description: Data de referência (yyyy-MM-dd); omitida = hoje
+          schema:
+            type: string
+            format: date
+          example: '2026-12-01'
+      responses:
+        '200':
+          description: Vínculos vigentes (pode ser vazia)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PacienteConvenioResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /integracao/pacientes:
     get:
       tags: [Integração]
@@ -686,7 +869,7 @@ paths:
       description: Ids inexistentes são ignorados. CPF sempre mascarado.
       operationId: integracaoPacientesLote
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/Ids'
@@ -709,7 +892,7 @@ paths:
       summary: Especialidades ativas
       operationId: integracaoEspecialidades
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -729,7 +912,7 @@ paths:
         que atendem a especialidade. Com os dois, devolve a interseção. Sem nenhum dos dois: 422.
       operationId: integracaoMedicos
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: ids
@@ -766,7 +949,7 @@ paths:
       summary: Resumo do médico
       operationId: integracaoMedico
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -786,7 +969,7 @@ paths:
       description: Responde 200 mesmo quando o id não existe (existe = false).
       operationId: integracaoSituacaoMedico
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -804,7 +987,7 @@ paths:
       description: false se o médico não existir, estiver inativo ou não atender a especialidade (ativa).
       operationId: integracaoMedicoAtende
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: especialidadeId
@@ -826,7 +1009,7 @@ paths:
       summary: Salas ativas, opcionalmente de um tipo
       operationId: integracaoSalas
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: tipo
@@ -850,7 +1033,7 @@ paths:
       summary: Resumo da sala
       operationId: integracaoSala
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -868,7 +1051,7 @@ paths:
       description: Planos ficam com outro grupo e não fazem parte desta API.
       operationId: integracaoConvenios
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -887,7 +1070,7 @@ paths:
       summary: Resumo do convênio
       operationId: integracaoConvenio
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -896,6 +1079,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConvenioResumo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /pacientes/{pacienteId}/convenios:
+    parameters:
+      - $ref: '#/components/parameters/PacienteId'
+    get:
+      tags: [Pacientes]
+      summary: Lista os vínculos do paciente com convênios (RF06)
+      description: Inclui os desvinculados (histórico), depois dos ativos. `vigente` é calculado para hoje.
+      operationId: listarConveniosPaciente
+      responses:
+        '200':
+          description: Vínculos do paciente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PacienteConvenioResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Pacientes]
+      summary: Vincula o paciente a um convênio (HU04)
+      description: |
+        O plano fica com outro grupo: o vínculo é direto com o convênio. Regras:
+        convênio ativo (RN06, 422 `ADM-PCV-001`); um vínculo **ativo** por convênio (RN05, 409 `ADM-PCV-002`);
+        carteirinha não vencida (RN07, 422 `ADM-PCV-003`); paciente ativo (422 `ADM-PCV-004`).
+        Publica `paciente.convenio-vinculado`.
+      operationId: vincularConvenioPaciente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteConvenioRequest'
+      responses:
+        '201':
+          description: Vinculado. Header `Location` aponta para o vínculo.
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /pacientes/{pacienteId}/convenios/{vinculoId}:
+    parameters:
+      - $ref: '#/components/parameters/PacienteId'
+      - name: vinculoId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags: [Pacientes]
+      summary: Busca um vínculo do paciente
+      operationId: buscarConvenioPaciente
+      responses:
+        '200':
+          description: Vínculo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Pacientes]
+      summary: Substitui convênio, carteirinha e validade do vínculo
+      description: |
+        Mesmas regras do cadastro. Vínculo desvinculado não muda mais (422 `ADM-PCV-005`): crie um novo.
+        Publica `paciente.convenio-atualizado` com `camposAlterados` (nada muda = nenhum evento).
+      operationId: atualizarConvenioPaciente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PacienteConvenioRequest'
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PacienteConvenioResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+    delete:
+      tags: [Pacientes]
+      summary: Desvincula (inativa) o vínculo
+      description: |
+        Não apaga: o vínculo fica no histórico com `ativo = false` e deixa de ser vigente.
+        Publica `paciente.convenio-desvinculado` (repetir não publica de novo).
+      operationId: desvincularConvenioPaciente
+      responses:
+        '204':
+          description: Desvinculado
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -996,8 +1296,17 @@ paths:
     get:
       tags: [Convênios]
       summary: Lista convênios (paginado)
+      description: |
+        Sem `ativo`, traz **só os ativos**: são os convênios disponíveis para novas vinculações a pacientes.
+        Use `ativo=false` para consultar os inativos (ex.: para reativá-los).
       operationId: listarConvenios
       parameters:
+        - name: ativo
+          in: query
+          required: false
+          description: Situação; omitido = só ativos
+          schema:
+            type: boolean
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -1177,8 +1486,8 @@ paths:
       summary: Lista insumos (paginado)
       operationId: listarInsumos
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -1192,11 +1501,11 @@ paths:
                 $ref: '#/components/schemas/InsumoPage'
     post:
       tags: [Insumos]
-      summary: Cadastra um insumo (ADMIN ou ms-estoque)
+      summary: Cadastra um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: criarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -1224,8 +1533,8 @@ paths:
       summary: Busca insumo por id
       operationId: buscarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrado
@@ -1237,11 +1546,11 @@ paths:
           $ref: '#/components/responses/NotFound'
     put:
       tags: [Insumos]
-      summary: Atualiza um insumo (ADMIN ou ms-estoque)
+      summary: Atualiza um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: atualizarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -1263,12 +1572,12 @@ paths:
           $ref: '#/components/responses/Conflict'
     delete:
       tags: [Insumos]
-      summary: Remove um insumo (ADMIN ou ms-estoque)
+      summary: Remove um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       description: Retorna 409 se o insumo for usado em algum procedimento.
       operationId: removerInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '204':
           description: Removido
@@ -1284,7 +1593,7 @@ paths:
       summary: 'Atualiza só o custo unitário (ex.: ms-estoque após uma compra)'
       operationId: atualizarCustoInsumo
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       requestBody:
         required: true
@@ -1307,9 +1616,15 @@ paths:
   /procedimentos:
     get:
       tags: [Procedimentos]
-      summary: Lista procedimentos (paginado)
+      summary: Lista procedimentos e exames (paginado)
       operationId: listarProcedimentos
       parameters:
+        - name: tipo
+          in: query
+          required: false
+          description: Só procedimentos ou só exames. Sem ele, traz os dois. Valor inválido -> 400.
+          schema:
+            $ref: '#/components/schemas/TipoProcedimento'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -1322,7 +1637,7 @@ paths:
                 $ref: '#/components/schemas/ProcedimentoPage'
     post:
       tags: [Procedimentos]
-      summary: Cadastra um procedimento com seus insumos
+      summary: Cadastra um procedimento ou exame (tipo) com seus insumos
       operationId: criarProcedimento
       requestBody:
         required: true
@@ -1406,8 +1721,8 @@ paths:
       summary: Lista custos (paginado), opcionalmente de um médico
       operationId: listarCustosMedicos
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -1461,8 +1776,8 @@ paths:
       description: Informe `especialidadeId` (consulta) **ou** `procedimentoId`.
       operationId: buscarCustoVigente
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -1505,8 +1820,8 @@ paths:
       summary: Busca custo por id
       operationId: buscarCustoMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrado
@@ -1557,8 +1872,8 @@ paths:
       summary: Lista disponibilidades (paginado), opcionalmente de um médico
       operationId: listarDisponibilidades
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -1611,8 +1926,8 @@ paths:
       description: Semanais do dia, menos os que cruzam um bloqueio (EXCECAO com disponivel=false), mais os horários extras.
       operationId: agendaDoMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -1645,8 +1960,8 @@ paths:
       summary: Busca disponibilidade por id
       operationId: buscarDisponibilidade
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrada
@@ -1707,13 +2022,14 @@ paths:
       description: |
         Inativar **não apaga**: o registro continua consultável, mas não pode entrar em vínculos novos (422) e
         custos/disponibilidades inativos são ignorados. Inativar médico ou funcionário também bloqueia o login;
-        ninguém pode inativar o próprio cadastro (422). Quem pode chamar segue a regra de **escrita** do recurso
-        (ex.: pacientes → ADMIN ou FUNCIONARIO; médicos → ADMIN; insumos → ADMIN ou ms-estoque).
+        ninguém pode inativar o próprio cadastro (422). Especialidade com médico **ativo** vinculado não pode ser
+        inativada (RN11): 422 com `codigo: ADM-ESP-002` e `medicosVinculados` (quantidade). Quem pode chamar segue a regra de **escrita** do recurso
+        (permissão `<RECURSO>_GERENCIAR`, ex.: pacientes → `PACIENTE_GERENCIAR`; insumos → `INSUMO_GERENCIAR`).
         Usuários têm o endpoint próprio `PATCH /usuarios/{id}/status`.
       operationId: alterarStatusCadastro
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -1740,16 +2056,23 @@ paths:
 
 components:
   securitySchemes:
+    keycloak:
+      type: oauth2
+      description: |
+        Login no Keycloak (realm `clinical`) com o client público `clinical-web` (authorization code + PKCE).
+        Endereço local; em outro ambiente, troque pelo endereço público do Keycloak.
+      flows:
+        authorizationCode:
+          authorizationUrl: http://localhost:8180/realms/clinical/protocol/openid-connect/auth
+          tokenUrl: http://localhost:8180/realms/clinical/protocol/openid-connect/token
+          scopes: {}
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Token obtido em `POST /auth/login` (válido por 2 h por padrão).
-    apiKey:
-      type: apiKey
-      in: header
-      name: X-Api-Key
-      description: Chave de integração entre microserviços (`INTEGRACAO_API_KEY`). Acesso somente leitura.
+      description: |
+        Access token do Keycloak (realm `clinical`), colado à mão. Usuários: client `clinical-web`; outros
+        microserviços: client credentials com o próprio client (ex.: `ms-agendamento`).
 
   parameters:
     Ids:
@@ -1765,6 +2088,13 @@ components:
       style: form
       explode: false
       example: [1, 2, 3]
+    PacienteId:
+      name: pacienteId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
     Id:
       name: id
       in: path
@@ -1827,7 +2157,7 @@ components:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
     Forbidden:
-      description: Autenticado, mas o perfil não tem permissão para esta operação
+      description: Autenticado, mas sem a permissão exigida por esta operação
       content:
         application/problem+json:
           schema:
@@ -1926,7 +2256,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2015,7 +2345,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2057,6 +2387,67 @@ components:
         page:
           $ref: '#/components/schemas/PageMetadata'
 
+    MedicoBuscaRequest:
+      type: object
+      description: Filtros da busca de médicos; todos opcionais e combinados (E).
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: carlos
+        crm:
+          type: string
+          maxLength: 20
+          description: Número do CRM completo
+          example: '123456'
+        ufCrm:
+          $ref: '#/components/schemas/UF'
+        especialidadeId:
+          type: integer
+          format: int64
+          description: Médicos que atendem essa especialidade
+          example: 1
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
+
+    FuncionarioBuscaRequest:
+      type: object
+      description: Filtros da busca de funcionários; todos opcionais.
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: ana
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+          description: CPF completo, só dígitos
+          example: '12345678909'
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
+
+    PacienteBuscaRequest:
+      type: object
+      description: Filtros da busca de pacientes; todos opcionais.
+      properties:
+        nome:
+          type: string
+          maxLength: 150
+          description: Parte do nome, sem diferenciar maiúsculas
+          example: maria
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+          description: CPF completo, só dígitos
+          example: '12345678909'
+        ativo:
+          type: boolean
+          description: Situação; omitido = só ativos
+
     PacienteRequest:
       type: object
       required: [nome, cpf, dataNascimento]
@@ -2093,6 +2484,16 @@ components:
           type: integer
           format: int64
           description: Responsável legal. **Obrigatório para menores de 18 anos** (senão 422).
+        consentimentoLgpd:
+          type: boolean
+          description: |
+            Consentimento LGPD (RF26). Omitido ou `false` = sem consentimento (retira o anterior).
+            A data do consentimento é registrada pelo servidor.
+        versaoTermoLgpd:
+          type: string
+          maxLength: 20
+          description: Versão do termo aceito. **Obrigatória quando `consentimentoLgpd` é true** (senão 400).
+          example: '1.0'
     PacienteResponse:
       type: object
       properties:
@@ -2108,7 +2509,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2137,6 +2538,23 @@ components:
           description: Calculada a partir da data de nascimento
         menorDeIdade:
           type: boolean
+        consentimentoLgpd:
+          type: boolean
+        versaoTermoLgpd:
+          type: string
+          nullable: true
+        dataConsentimentoLgpd:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando o paciente consentiu; muda só se a versão do termo mudar
+        convenios:
+          type: array
+          description: |
+            Convênios vinculados (ativos), com carteirinha, validade e `vigente`. **Só no `GET /pacientes/{id}`**;
+            nas listagens e buscas o campo não vem. O histórico completo está em `/pacientes/{id}/convenios`.
+          items:
+            $ref: '#/components/schemas/PacienteConvenioResponse'
         dataCriacao:
           type: string
           format: date-time
@@ -2244,6 +2662,82 @@ components:
           type: string
         ativo:
           type: boolean
+    PacienteConvenioRequest:
+      type: object
+      required: [convenioId, numeroCarteirinha]
+      properties:
+        convenioId:
+          type: integer
+          format: int64
+          description: Convênio **ativo** (RN06, senão 422 ADM-PCV-001)
+        numeroCarteirinha:
+          type: string
+          maxLength: 30
+          example: '0001234567'
+        validade:
+          type: string
+          format: date
+          nullable: true
+          description: Validade da carteirinha; opcional, mas não pode estar vencida (RN07, senão 422 ADM-PCV-003)
+    PacienteConvenioResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        pacienteId:
+          type: integer
+          format: int64
+        convenio:
+          $ref: '#/components/schemas/ConvenioResumo'
+        numeroCarteirinha:
+          type: string
+        validade:
+          type: string
+          format: date
+          nullable: true
+        ativo:
+          type: boolean
+          description: false = desvinculado (fica no histórico)
+        vigente:
+          type: boolean
+          description: Vigente hoje = vínculo ativo, convênio ativo e carteirinha válida (RN16)
+        criadoPor:
+          type: string
+        atualizadoPor:
+          type: string
+        dataCriacao:
+          type: string
+          format: date-time
+        dataModificacao:
+          type: string
+          format: date-time
+    PacienteConvenioResumo:
+      type: object
+      description: Vínculo para a integração e o campo `dados` dos eventos `paciente.convenio-*`.
+      properties:
+        id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+          format: uuid
+        pacienteId:
+          type: integer
+          format: int64
+        convenio:
+          $ref: '#/components/schemas/ConvenioResumo'
+        numeroCarteirinha:
+          type: string
+        validade:
+          type: string
+          format: date
+          nullable: true
+        ativo:
+          type: boolean
     AtendeResponse:
       type: object
       properties:
@@ -2269,10 +2763,16 @@ components:
           type: string
 
     # ---------- Autenticação e usuários ----------
-    Perfil:
+    Permissao:
       type: string
-      enum: [ADMIN, FUNCIONARIO, MEDICO]
-      description: Nível de acesso do usuário (vira ROLE_<perfil> na API). Paciente não tem acesso.
+      description: |
+        Permissão do RBAC: client role do client `ms-administrativo` no Keycloak (vira uma authority com o mesmo
+        nome). `*_CONSULTAR`: leituras; `*_GERENCIAR`: escrita.
+      enum: [USUARIO_GERENCIAR, FUNCIONARIO_CONSULTAR, FUNCIONARIO_GERENCIAR, MEDICO_CONSULTAR, MEDICO_GERENCIAR,
+             ESPECIALIDADE_CONSULTAR, ESPECIALIDADE_GERENCIAR, PACIENTE_CONSULTAR, PACIENTE_GERENCIAR,
+             CONVENIO_CONSULTAR, CONVENIO_GERENCIAR, SALA_CONSULTAR, SALA_GERENCIAR, PROCEDIMENTO_CONSULTAR,
+             PROCEDIMENTO_GERENCIAR, INSUMO_CONSULTAR, INSUMO_GERENCIAR, CUSTO_MEDICO_CONSULTAR,
+             CUSTO_MEDICO_GERENCIAR, DISPONIBILIDADE_CONSULTAR, DISPONIBILIDADE_GERENCIAR, INTEGRACAO_CONSULTAR]
     SenhaPessoa:
       type: string
       format: password
@@ -2281,51 +2781,36 @@ components:
       writeOnly: true
       description: |
         Senha do usuário de acesso (login = CPF). **Obrigatória no cadastro (POST)**; na atualização (PUT),
-        se informada, troca a senha. Armazenada apenas como hash BCrypt.
+        se informada, troca a senha. Vai só para o Keycloak (não é guardada aqui). Política do realm: 8 a 72
+        caracteres e diferente do login (CPF); senha recusada pelo Keycloak: 422.
       example: senhaForte1
-    LoginRequest:
+    UsuarioLogadoResponse:
       type: object
-      required: [login, senha]
+      description: Dono do token, lido do próprio token do Keycloak
       properties:
         login:
           type: string
-          description: CPF (médico ou funcionário) ou login do administrador inicial
-          example: admin
-        senha:
+          description: CPF (funcionário/médico) ou o username no Keycloak (ex. admin)
+          example: '11122233396'
+        nome:
           type: string
-          format: password
-          example: admin12345
-    TokenResponse:
-      type: object
-      properties:
-        accessToken:
+          example: Ana Lima
+        email:
           type: string
-          description: JWT (HS256) com os claims sub (login), uid, perfil, iss, iat e exp
-        tokenType:
-          type: string
-          example: Bearer
-        expiresIn:
-          type: integer
-          format: int64
-          description: Validade do token em segundos
-          example: 7200
-        usuario:
-          $ref: '#/components/schemas/UsuarioResponse'
-    AlterarSenhaRequest:
-      type: object
-      required: [senhaAtual, novaSenha]
-      properties:
-        senhaAtual:
-          type: string
-          format: password
-        novaSenha:
-          type: string
-          format: password
-          minLength: 8
-          maxLength: 72
+        grupos:
+          type: array
+          description: Grupos do Keycloak (claim `groups`)
+          items:
+            type: string
+          example: [RECEPCIONISTA]
+        permissoes:
+          type: array
+          description: Client roles do ms-administrativo (somadas de todos os grupos)
+          items:
+            $ref: '#/components/schemas/Permissao'
     UsuarioResponse:
       type: object
-      description: Usuário de acesso (a senha nunca é devolvida)
+      description: Usuário de acesso. A senha fica só no Keycloak.
       properties:
         id:
           type: integer
@@ -2333,10 +2818,21 @@ components:
         login:
           type: string
           example: '12345678901'
-        perfil:
-          $ref: '#/components/schemas/Perfil'
+        keycloakId:
+          type: string
+          description: Id do usuário no Keycloak (vazio em registros anteriores ao Keycloak)
+          example: 6f1c9a2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b
         ativo:
           type: boolean
+          description: Espelhado no Keycloak (inativo não faz login)
+        grupos:
+          type: array
+          description: |
+            Grupos atuais no Keycloak. Só no detalhe (`GET /usuarios/{id}`, médico/funcionário por id e respostas
+            de cadastro/atualização); nas listagens é omitido.
+          items:
+            type: string
+          example: [RECEPCIONISTA]
         dataCriacao:
           type: string
           format: date-time
@@ -2401,6 +2897,15 @@ components:
           example: F-001
         cargo:
           $ref: '#/components/schemas/Cargo'
+        grupos:
+          type: array
+          uniqueItems: true
+          description: |
+            Grupos do Keycloak (pelo nome) além do grupo do cargo (opcional; exige `USUARIO_GERENCIAR`). No PUT,
+            substitui os grupos extras; omitido, os grupos ficam como estão. Ver `GET /grupos`.
+          items:
+            type: string
+          example: [MEDICO]
         setor:
           type: string
           maxLength: 100
@@ -2427,7 +2932,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2480,10 +2985,16 @@ components:
     Cargo:
       type: string
       enum: [RECEPCIONISTA, ESTOQUISTA, RESPONSAVEL_FINANCEIRO, ADMINISTRADOR]
-      description: Define o nível de acesso (ADMINISTRADOR → ADMIN; demais → FUNCIONARIO)
+      description: Cargo do funcionário. Define o grupo de acesso padrão (grupo com o mesmo nome)
     TipoSala:
       type: string
-      enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO]
+      enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO, EXAME]
+    TipoProcedimento:
+      type: string
+      enum: [PROCEDIMENTO, EXAME]
+      description: |
+        Exames são cadastrados junto aos procedimentos, com os mesmos campos (TUSS, especialidade, duração, valor
+        base, insumos e custos dos médicos). PROCEDIMENTO: clínico ou cirúrgico; EXAME: ex. hemograma, ECG.
     DiaSemana:
       type: string
       enum: [DOMINGO, SEGUNDA, TERCA, QUARTA, QUINTA, SEXTA, SABADO]
@@ -2568,7 +3079,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2638,7 +3149,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2703,7 +3214,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2779,7 +3290,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2817,10 +3328,15 @@ components:
         especialidadeId:
           type: integer
           format: int64
+        tipo:
+          allOf:
+            - $ref: '#/components/schemas/TipoProcedimento'
+          description: |
+            Opcional. Sem ele: PROCEDIMENTO no cadastro; na atualização (PUT), o tipo atual não muda.
         codigoTuss:
           type: string
           maxLength: 20
-          description: Único
+          description: Único entre procedimentos e exames
           example: '30101012'
         nome:
           type: string
@@ -2867,12 +3383,14 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
         especialidade:
           $ref: '#/components/schemas/EspecialidadeResponse'
+        tipo:
+          $ref: '#/components/schemas/TipoProcedimento'
         codigoTuss:
           type: string
         nome:
@@ -2960,7 +3478,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3054,7 +3572,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração

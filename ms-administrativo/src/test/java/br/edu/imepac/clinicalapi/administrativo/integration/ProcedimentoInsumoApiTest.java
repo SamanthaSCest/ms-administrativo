@@ -1,5 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.integration;
 
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
@@ -13,9 +14,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithAnonymousUser;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -27,14 +29,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Insumos (inclusive pelo ms-estoque via X-Api-Key) e procedimentos com insumos e custo. */
+/** Insumos (inclusive por outro microserviço, com token client credentials) e procedimentos com insumos e custo. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class ProcedimentoInsumoApiTest {
 
-    private static final String API_KEY = "dev-integracao-key";
+    private static final RequestPostProcessor SERVICO =
+            Acessos.grupo("service-account-ms-agendamento", Acessos.SERVICO);
 
     @Autowired
     private MockMvc mockMvc;
@@ -115,6 +118,72 @@ class ProcedimentoInsumoApiTest {
         mockMvc.perform(delete("/insumos/{id}", gaze)).andExpect(status().isNoContent());
     }
 
+    /** Exame: mesmo cadastro, com tipo EXAME e código TUSS próprio. */
+    private String exameJson(long especialidadeId, String tipo) {
+        return """
+                {"especialidadeId":%d,%s"codigoTuss":"40304361","nome":"Hemograma completo","duracaoMinutos":15,
+                 "valorBase":35.00,"insumos":[]}
+                """.formatted(especialidadeId, tipo == null ? "" : "\"tipo\":\"%s\",".formatted(tipo));
+    }
+
+    @Test
+    void exame_cadastradoJuntoAosProcedimentos_eFiltradoPorTipo() throws Exception {
+        long esp = especialidade();
+        // Sem tipo: continua sendo procedimento (quem já usa a API não precisa mudar nada)
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(procedimentoJson(esp, "[]")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("PROCEDIMENTO"));
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "EXAME")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("EXAME"))
+                .andExpect(jsonPath("$.codigoTuss").value("40304361"));
+
+        mockMvc.perform(get("/procedimentos").param("tipo", "EXAME"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].nome").value("Hemograma completo"));
+        mockMvc.perform(get("/procedimentos").param("tipo", "PROCEDIMENTO"))
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].nome").value("Biópsia de pele"));
+        // Sem filtro: os dois
+        mockMvc.perform(get("/procedimentos")).andExpect(jsonPath("$.content", hasSize(2)));
+    }
+
+    @Test
+    void exame_atualizarSemTipo_mantemExame_eComTipo_troca() throws Exception {
+        long esp = especialidade();
+        long id = id(mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "EXAME")))
+                .andExpect(status().isCreated()).andReturn());
+
+        mockMvc.perform(put("/procedimentos/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, null).replace("35.00", "40.00")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("EXAME"))
+                .andExpect(jsonPath("$.valorBase").value(40.00));
+        mockMvc.perform(put("/procedimentos/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "PROCEDIMENTO")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("PROCEDIMENTO"));
+    }
+
+    @Test
+    void exame_tussUnicoEntreProcedimentosEExames_eTipoInvalido() throws Exception {
+        long esp = especialidade();
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                .content(procedimentoJson(esp, "[]"))).andExpect(status().isCreated());
+        // Mesmo código TUSS do procedimento já cadastrado, agora como exame: 409
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(procedimentoJson(esp, "[]").replace("\"codigoTuss\"", "\"tipo\":\"EXAME\",\"codigoTuss\"")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "LABORATORIO")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/procedimentos").param("tipo", "LABORATORIO")).andExpect(status().isBadRequest());
+    }
+
     @Test
     void procedimento_insumoRepetido_retorna422() throws Exception {
         long luva = insumo("LUVA", "2.50");
@@ -144,28 +213,42 @@ class ProcedimentoInsumoApiTest {
 
     @Test
     @WithAnonymousUser
-    void estoque_comApiKey_cadastraEAtualizaCustoDoInsumo() throws Exception {
-        long id = id(mockMvc.perform(post("/insumos").header("X-Api-Key", API_KEY)
+    void servico_comToken_cadastraEAtualizaCustoDoInsumo() throws Exception {
+        long id = id(mockMvc.perform(post("/insumos").with(SERVICO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"codigo\":\"SERINGA\",\"nome\":\"Seringa 5ml\",\"unidadeMedida\":\"UN\",\"custoUnitario\":0.80}"))
                 .andExpect(status().isCreated()).andReturn());
 
-        mockMvc.perform(patch("/insumos/{id}/custo", id).header("X-Api-Key", API_KEY)
+        mockMvc.perform(patch("/insumos/{id}/custo", id).with(SERVICO)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"custoUnitario\":0.95}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.custoUnitario").value(0.95));
 
-        mockMvc.perform(get("/insumos/{id}", id).header("X-Api-Key", API_KEY)).andExpect(status().isOk());
-        // Sem a chave: 401
+        mockMvc.perform(get("/insumos/{id}", id).with(SERVICO)).andExpect(status().isOk());
+        // Sem token: 401
         mockMvc.perform(get("/insumos/{id}", id)).andExpect(status().isUnauthorized());
     }
 
     @Test
-    @WithMockUser(username = "recepcao", roles = "FUNCIONARIO")
-    void funcionario_consultaInsumos_masNaoAltera() throws Exception {
+    @ComGrupo(username = "dr", value = "MEDICO")
+    void medico_consultaInsumos_masNaoAltera() throws Exception {
         mockMvc.perform(get("/insumos")).andExpect(status().isOk());
         mockMvc.perform(post("/insumos").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"codigo\":\"X\",\"nome\":\"X\",\"unidadeMedida\":\"UN\",\"custoUnitario\":1}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @ComGrupo(username = "estoque", value = "ESTOQUISTA")
+    void estoquista_cadastraInsumo() throws Exception {
+        mockMvc.perform(post("/insumos").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigo\":\"EST-1\",\"nome\":\"Luva\",\"unidadeMedida\":\"UN\",\"custoUnitario\":1}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @ComGrupo(username = "recepcao", value = "RECEPCIONISTA")
+    void recepcionista_naoConsultaInsumos() throws Exception {
+        mockMvc.perform(get("/insumos")).andExpect(status().isForbidden());
     }
 }

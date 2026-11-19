@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
- * Insumos. Escrita: ADMIN e ms-estoque (X-Api-Key). Contrato: static/contract/openapi-administrativo.yaml
+ * Insumos. Escrita: INSUMO_GERENCIAR (ex.: ESTOQUISTA e a service account de outro microserviço). Contrato: static/contract/openapi-administrativo.yaml
  */
 @RestController
 @RequestMapping("/insumos")

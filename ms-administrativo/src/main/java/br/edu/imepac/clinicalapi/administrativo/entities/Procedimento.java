@@ -3,6 +3,8 @@ package br.edu.imepac.clinicalapi.administrativo.entities;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -16,8 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Procedimento médico (código TUSS), de uma especialidade, com os insumos que consome.
- * Os InsumoProcedimento são composição: salvos e removidos junto com o procedimento.
+ * Procedimento médico ou exame (código TUSS, ver {@link TipoProcedimento}), de uma especialidade, com os insumos que
+ * consome. Os InsumoProcedimento são composição: salvos e removidos junto com o procedimento.
  */
 @Getter
 @Setter
@@ -32,6 +34,11 @@ public class Procedimento extends EntidadeBase {
     /** Código na tabela TUSS (Terminologia Unificada da Saúde Suplementar). Único. */
     @Column(name = "codigo_tuss", nullable = false, unique = true, length = 20)
     private String codigoTuss;
+
+    /** Procedimento ou exame. Os cadastrados antes da V16 são PROCEDIMENTO. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TipoProcedimento tipo = TipoProcedimento.PROCEDIMENTO;
 
     @Column(nullable = false, length = 150)
     private String nome;

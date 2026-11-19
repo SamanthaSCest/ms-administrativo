@@ -1,0 +1,216 @@
+{
+  "realm": "clinical",
+  "displayName": "Clinical",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": true,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "passwordPolicy": "length(8) and maxLength(72) and notUsername",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 7200,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["pt-BR", "en"],
+  "defaultLocale": "pt-BR",
+  "roles": {
+    "client": {
+      "ms-administrativo": [
+        { "name": "USUARIO_GERENCIAR", "description": "Gerenciar usuários e seus acessos" },
+        { "name": "FUNCIONARIO_CONSULTAR", "description": "Consultar funcionários" },
+        { "name": "FUNCIONARIO_GERENCIAR", "description": "Cadastrar, alterar e desativar funcionários" },
+        { "name": "MEDICO_CONSULTAR", "description": "Consultar médicos" },
+        { "name": "MEDICO_GERENCIAR", "description": "Cadastrar, alterar e desativar médicos" },
+        { "name": "ESPECIALIDADE_CONSULTAR", "description": "Consultar especialidades" },
+        { "name": "ESPECIALIDADE_GERENCIAR", "description": "Cadastrar, alterar e desativar especialidades" },
+        { "name": "PACIENTE_CONSULTAR", "description": "Consultar pacientes, responsáveis e convênios do paciente" },
+        { "name": "PACIENTE_GERENCIAR", "description": "Cadastrar e alterar pacientes, responsáveis e vínculos com convênio" },
+        { "name": "CONVENIO_CONSULTAR", "description": "Consultar convênios" },
+        { "name": "CONVENIO_GERENCIAR", "description": "Cadastrar, alterar e desativar convênios" },
+        { "name": "SALA_CONSULTAR", "description": "Consultar salas" },
+        { "name": "SALA_GERENCIAR", "description": "Cadastrar, alterar e desativar salas" },
+        { "name": "PROCEDIMENTO_CONSULTAR", "description": "Consultar procedimentos" },
+        { "name": "PROCEDIMENTO_GERENCIAR", "description": "Cadastrar, alterar e desativar procedimentos" },
+        { "name": "INSUMO_CONSULTAR", "description": "Consultar insumos" },
+        { "name": "INSUMO_GERENCIAR", "description": "Cadastrar e alterar insumos e seus custos" },
+        { "name": "CUSTO_MEDICO_CONSULTAR", "description": "Consultar custos dos médicos" },
+        { "name": "CUSTO_MEDICO_GERENCIAR", "description": "Cadastrar e alterar custos dos médicos" },
+        { "name": "DISPONIBILIDADE_CONSULTAR", "description": "Consultar disponibilidades dos médicos" },
+        { "name": "DISPONIBILIDADE_GERENCIAR", "description": "Cadastrar e alterar disponibilidades dos médicos" },
+        { "name": "INTEGRACAO_CONSULTAR", "description": "Consultar os endpoints de integração (/integracao)" }
+      ]
+    }
+  },
+  "groups": [
+    {
+      "name": "ADMINISTRADOR",
+      "attributes": { "descricao": ["Acesso total, inclusive usuários e acessos"] },
+      "clientRoles": {
+        "ms-administrativo": [
+          "USUARIO_GERENCIAR", "FUNCIONARIO_CONSULTAR", "FUNCIONARIO_GERENCIAR",
+          "MEDICO_CONSULTAR", "MEDICO_GERENCIAR", "ESPECIALIDADE_CONSULTAR", "ESPECIALIDADE_GERENCIAR",
+          "PACIENTE_CONSULTAR", "PACIENTE_GERENCIAR", "CONVENIO_CONSULTAR", "CONVENIO_GERENCIAR",
+          "SALA_CONSULTAR", "SALA_GERENCIAR", "PROCEDIMENTO_CONSULTAR", "PROCEDIMENTO_GERENCIAR",
+          "INSUMO_CONSULTAR", "INSUMO_GERENCIAR", "CUSTO_MEDICO_CONSULTAR", "CUSTO_MEDICO_GERENCIAR",
+          "DISPONIBILIDADE_CONSULTAR", "DISPONIBILIDADE_GERENCIAR", "INTEGRACAO_CONSULTAR"
+        ]
+      }
+    },
+    {
+      "name": "RECEPCIONISTA",
+      "attributes": { "descricao": ["Atendimento e agendamento: gerencia pacientes e consulta o que precisa para atender e agendar"] },
+      "clientRoles": {
+        "ms-administrativo": [
+          "PACIENTE_CONSULTAR", "PACIENTE_GERENCIAR", "MEDICO_CONSULTAR", "ESPECIALIDADE_CONSULTAR",
+          "CONVENIO_CONSULTAR", "SALA_CONSULTAR", "PROCEDIMENTO_CONSULTAR", "CUSTO_MEDICO_CONSULTAR",
+          "DISPONIBILIDADE_CONSULTAR"
+        ]
+      }
+    },
+    {
+      "name": "ESTOQUISTA",
+      "attributes": { "descricao": ["Gerencia insumos e consulta procedimentos e salas"] },
+      "clientRoles": {
+        "ms-administrativo": ["INSUMO_CONSULTAR", "INSUMO_GERENCIAR", "PROCEDIMENTO_CONSULTAR", "SALA_CONSULTAR"]
+      }
+    },
+    {
+      "name": "RESPONSAVEL_FINANCEIRO",
+      "attributes": { "descricao": ["Gerencia custos dos médicos e consulta o que entra no faturamento"] },
+      "clientRoles": {
+        "ms-administrativo": [
+          "CUSTO_MEDICO_CONSULTAR", "CUSTO_MEDICO_GERENCIAR", "CONVENIO_CONSULTAR", "PROCEDIMENTO_CONSULTAR",
+          "INSUMO_CONSULTAR", "MEDICO_CONSULTAR", "ESPECIALIDADE_CONSULTAR", "PACIENTE_CONSULTAR"
+        ]
+      }
+    },
+    {
+      "name": "MEDICO",
+      "attributes": { "descricao": ["Consulta pacientes e os cadastros de apoio ao atendimento"] },
+      "clientRoles": {
+        "ms-administrativo": [
+          "PACIENTE_CONSULTAR", "MEDICO_CONSULTAR", "ESPECIALIDADE_CONSULTAR", "CONVENIO_CONSULTAR",
+          "SALA_CONSULTAR", "PROCEDIMENTO_CONSULTAR", "INSUMO_CONSULTAR", "DISPONIBILIDADE_CONSULTAR"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ms-administrativo",
+      "name": "ms-administrativo",
+      "description": "Resource server (dono das roles de permissão) e service account que cria usuários pela Admin API",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_ADMINISTRATIVO_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "ms-agendamento",
+      "name": "ms-agendamento",
+      "description": "Chamadas serviço-a-serviço ao ms-administrativo (client credentials)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_AGENDAMENTO_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "clinical-web",
+      "name": "Clinical (front e Swagger UI)",
+      "description": "Client público com PKCE. Direct grant (senha) habilitado só para desenvolvimento",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:8081/*",
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "grupos",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "firstName": "Administrador",
+      "lastName": "Inicial",
+      "credentials": [
+        { "type": "password", "value": "${KEYCLOAK_CLINICAL_ADMIN_PASSWORD}", "temporary": false }
+      ],
+      "groups": ["/ADMINISTRADOR"]
+    },
+    {
+      "username": "service-account-ms-administrativo",
+      "enabled": true,
+      "serviceAccountClientId": "ms-administrativo",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users", "query-groups"]
+      }
+    },
+    {
+      "username": "service-account-ms-agendamento",
+      "enabled": true,
+      "serviceAccountClientId": "ms-agendamento",
+      "clientRoles": {
+        "ms-administrativo": [
+          "PACIENTE_CONSULTAR", "MEDICO_CONSULTAR", "ESPECIALIDADE_CONSULTAR", "CONVENIO_CONSULTAR",
+          "SALA_CONSULTAR", "PROCEDIMENTO_CONSULTAR", "INSUMO_CONSULTAR", "INSUMO_GERENCIAR",
+          "CUSTO_MEDICO_CONSULTAR", "DISPONIBILIDADE_CONSULTAR", "INTEGRACAO_CONSULTAR"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  }
+}

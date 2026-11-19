@@ -14,8 +14,8 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 /**
- * Funcionário = Pessoa (dados pessoais) + dados profissionais. O cargo define o nível de acesso
- * do usuário vinculado (ADMINISTRADOR -> ADMIN; demais -> FUNCIONARIO).
+ * Funcionário = Pessoa (dados pessoais) + dados profissionais. O cargo define o grupo de acesso padrão
+ * do usuário vinculado (RBAC: grupo com o mesmo nome do cargo).
  */
 @Getter
 @Setter

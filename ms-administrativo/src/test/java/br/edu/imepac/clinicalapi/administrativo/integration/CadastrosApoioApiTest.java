@@ -9,13 +9,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -25,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class CadastrosApoioApiTest {
 
     // CNPJ válido (dígitos verificadores corretos)
@@ -76,6 +77,31 @@ class CadastrosApoioApiTest {
     }
 
     @Test
+    void convenio_listar_semSituacao_trazSoAtivos_disponiveisParaVinculacao() throws Exception {
+        MvcResult r = mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
+                .content(convenioJson("111111", CNPJ))).andExpect(status().isCreated()).andReturn();
+        long ativo = objectMapper.readTree(r.getResponse().getContentAsString()).get("id").asLong();
+        r = mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
+                .content(convenioJson("222222", "11444777000161"))).andExpect(status().isCreated()).andReturn();
+        long inativo = objectMapper.readTree(r.getResponse().getContentAsString()).get("id").asLong();
+        mockMvc.perform(patch("/convenios/{id}/status", inativo).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":false}")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/convenios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(ativo));
+        mockMvc.perform(get("/convenios").param("ativo", "false"))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(inativo));
+
+        // Reativado, volta a aparecer entre os disponíveis
+        mockMvc.perform(patch("/convenios/{id}/status", inativo).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ativo\":true}")).andExpect(status().isOk());
+        mockMvc.perform(get("/convenios")).andExpect(jsonPath("$.page.totalElements").value(2));
+    }
+
+    @Test
     void convenio_cnpjInvalido_retorna400() throws Exception {
         mockMvc.perform(post("/convenios").contentType(MediaType.APPLICATION_JSON)
                         .content(convenioJson("123456", "11222333000100")))
@@ -105,10 +131,15 @@ class CadastrosApoioApiTest {
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"numero\":\"S1\",\"tipo\":\"COZINHA\"}"))
                 .andExpect(status().isBadRequest());
-        // EXAME deixou de existir: tipos válidos são CONSULTORIO, CIRURGIA e PROCEDIMENTO
+    }
+
+    @Test
+    void sala_deExame() throws Exception {
+        // EXAME voltou na V16, junto com os exames no cadastro de procedimentos
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"numero\":\"S1\",\"tipo\":\"EXAME\"}"))
-                .andExpect(status().isBadRequest());
+                        .content("{\"numero\":\"E1\",\"tipo\":\"EXAME\",\"observacoes\":\"Eletrocardiógrafo\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("EXAME"));
     }
 
     @Test
@@ -125,7 +156,7 @@ class CadastrosApoioApiTest {
     }
 
     @Test
-    @WithMockUser(username = "recepcao", roles = "FUNCIONARIO")
+    @ComGrupo(username = "recepcao", value = "RECEPCIONISTA")
     void funcionario_consultaMasNaoAltera() throws Exception {
         mockMvc.perform(get("/salas")).andExpect(status().isOk());
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)

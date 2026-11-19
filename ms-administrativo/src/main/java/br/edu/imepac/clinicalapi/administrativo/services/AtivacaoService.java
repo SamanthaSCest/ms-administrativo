@@ -2,6 +2,9 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import br.edu.imepac.clinicalapi.administrativo.dto.StatusResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.EntidadeBase;
+import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
+import br.edu.imepac.clinicalapi.administrativo.exceptions.NegocioException;
+import org.springframework.http.HttpStatus;
 import br.edu.imepac.clinicalapi.administrativo.entities.PossuiUsuario;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ConvenioRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.CustoMedicoRepository;
@@ -27,7 +30,7 @@ import java.util.Map;
 /**
  * Ativa/inativa qualquer cadastro que estende EntidadeBase (inativar() / reativar()).
  * Inativar não apaga: o registro continua consultável, mas não pode ser usado em novos vínculos.
- * Para médico e funcionário, o usuário de acesso acompanha o status (inativo não faz login).
+ * Para médico e funcionário, o usuário de acesso acompanha o status, também no Keycloak (inativo não faz login).
  */
 @Service
 public class AtivacaoService {
@@ -37,14 +40,19 @@ public class AtivacaoService {
     /** Nome do recurso na URL -> repositório. Os mesmos nomes do PATCH /{recurso}/{id}/status. */
     private final Map<String, JpaRepository<? extends EntidadeBase, Long>> repositorios;
     private final EventoService eventos;
+    private final MedicoRepository medicos;
+    private final UsuarioService usuarioService;
 
     public AtivacaoService(EspecialidadeRepository especialidades, MedicoRepository medicos,
                            PacienteRepository pacientes, FuncionarioRepository funcionarios,
                            ConvenioRepository convenios, SalaRepository salas,
                            ResponsavelLegalRepository responsaveis, InsumoRepository insumos,
                            ProcedimentoRepository procedimentos, CustoMedicoRepository custos,
-                           DisponibilidadeMedicaRepository disponibilidades, EventoService eventos) {
+                           DisponibilidadeMedicaRepository disponibilidades, EventoService eventos,
+                           UsuarioService usuarioService) {
         this.eventos = eventos;
+        this.usuarioService = usuarioService;
+        this.medicos = medicos;
         this.repositorios = Map.ofEntries(
                 Map.entry("especialidades", especialidades),
                 Map.entry("medicos", medicos),
@@ -73,9 +81,12 @@ public class AtivacaoService {
             if (!ativo && pessoa.getUsuario().getLogin().equals(loginAutenticado)) {
                 throw new BusinessRuleException("Não é possível inativar o próprio cadastro");
             }
-            pessoa.getUsuario().setAtivo(ativo);
+            usuarioService.definirAtivo(pessoa.getUsuario(), ativo);
         }
         boolean mudou = entidade.isAtivo() != ativo;
+        if (mudou && !ativo && entidade instanceof Especialidade) {
+            validarEspecialidadeSemMedicoAtivo(id);
+        }
         if (ativo) {
             entidade.reativar();
         } else {
@@ -90,6 +101,17 @@ public class AtivacaoService {
         }
         return new StatusResponse(recurso, salva.getId(), salva.getUuid(), salva.isAtivo(), salva.getAtualizadoPor(),
                 salva.getDataModificacao());
+    }
+
+    /** RN11: especialidade com médico ativo não pode ser inativada (ADM-ESP-002, 422). */
+    private void validarEspecialidadeSemMedicoAtivo(Long especialidadeId) {
+        long medicosAtivos = medicos.countByEspecialidadesIdAndAtivoTrue(especialidadeId);
+        if (medicosAtivos > 0) {
+            log.warn("Especialidade {} tem {} médico(s) ativo(s)", especialidadeId, medicosAtivos);
+            throw new NegocioException(HttpStatus.UNPROCESSABLE_ENTITY, "ADM-ESP-002",
+                    "Especialidade possui " + medicosAtivos + " médico(s) ativo(s) vinculado(s) e não pode ser inativada",
+                    Map.of("medicosVinculados", medicosAtivos));
+        }
     }
 
     @SuppressWarnings("unchecked")

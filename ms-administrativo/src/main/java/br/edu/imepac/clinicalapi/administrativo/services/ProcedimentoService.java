@@ -7,6 +7,7 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Insumo;
 import br.edu.imepac.clinicalapi.administrativo.entities.InsumoProcedimento;
 import br.edu.imepac.clinicalapi.administrativo.entities.Procedimento;
+import br.edu.imepac.clinicalapi.administrativo.entities.TipoProcedimento;
 import br.edu.imepac.clinicalapi.administrativo.repositories.CustoMedicoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
@@ -30,7 +31,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Procedimentos: código TUSS único, especialidade e insumos existentes (422), insumo sem repetição (422).
+ * Procedimentos e exames (tipo): código TUSS único entre os dois, especialidade e insumos existentes (422), insumo sem
+ * repetição (422).
  */
 @Service
 @RequiredArgsConstructor
@@ -60,8 +62,10 @@ public class ProcedimentoService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ProcedimentoResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(this::toResponse);
+    /** Sem tipo, traz procedimentos e exames. */
+    public Page<ProcedimentoResponse> listar(TipoProcedimento tipo, Pageable pageable) {
+        Page<Procedimento> pagina = tipo == null ? repository.findAll(pageable) : repository.findByTipo(tipo, pageable);
+        return pagina.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -119,6 +123,10 @@ public class ProcedimentoService {
             throw new BusinessRuleException("Especialidade inativa: " + especialidade.getNome());
         }
         procedimento.setEspecialidade(especialidade);
+        // Tipo omitido: mantém o atual (na criação, o padrão da entidade é PROCEDIMENTO)
+        if (request.getTipo() != null) {
+            procedimento.setTipo(request.getTipo());
+        }
         procedimento.setCodigoTuss(request.getCodigoTuss());
         procedimento.setNome(request.getNome());
         procedimento.setDescricao(request.getDescricao());
@@ -162,7 +170,7 @@ public class ProcedimentoService {
                         i.getQuantidade(), i.calcularCusto()))
                 .toList();
         return new ProcedimentoResponse(p.getId(), modelMapper.map(p.getEspecialidade(), EspecialidadeResponse.class),
-                p.getCodigoTuss(), p.getNome(), p.getDescricao(), p.getDuracaoMinutos(), p.getValorBase(),
+                p.getTipo(), p.getCodigoTuss(), p.getNome(), p.getDescricao(), p.getDuracaoMinutos(), p.getValorBase(),
                 itens, p.calcularCustoInsumos(), p.getUuid(), p.isAtivo(), p.getCriadoPor(), p.getAtualizadoPor(),
                 p.getDataCriacao(), p.getDataModificacao());
     }

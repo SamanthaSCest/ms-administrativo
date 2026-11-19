@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.controllers;
 
 import br.edu.imepac.clinicalapi.administrativo.dto.ProcedimentoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.ProcedimentoResponse;
+import br.edu.imepac.clinicalapi.administrativo.entities.TipoProcedimento;
 import br.edu.imepac.clinicalapi.administrativo.services.ProcedimentoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +16,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-/** Contrato: static/contract/openapi-administrativo.yaml */
+/** Procedimentos e exames (campo tipo). Contrato: static/contract/openapi-administrativo.yaml */
 @RestController
 @RequestMapping("/procedimentos")
 @RequiredArgsConstructor
@@ -33,9 +35,10 @@ public class ProcedimentoController {
                 .buildAndExpand(criado.id()).toUri()).body(criado);
     }
 
+    /** {@code ?tipo=EXAME} ou {@code ?tipo=PROCEDIMENTO}; sem tipo, traz os dois. */
     @GetMapping
-    public Page<ProcedimentoResponse> listar(Pageable pageable) {
-        return service.listar(pageable);
+    public Page<ProcedimentoResponse> listar(@RequestParam(required = false) TipoProcedimento tipo, Pageable pageable) {
+        return service.listar(tipo, pageable);
     }
 
     @GetMapping("/{id}")

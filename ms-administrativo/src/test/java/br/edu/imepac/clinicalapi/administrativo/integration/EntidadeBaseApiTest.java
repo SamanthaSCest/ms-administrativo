@@ -6,6 +6,8 @@ import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.PacienteRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.ProcedimentoRepository;
+import br.edu.imepac.clinicalapi.administrativo.repositories.UsuarioRepository;
+import br.edu.imepac.clinicalapi.administrativo.support.IdentidadeEmMemoria;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -23,9 +26,9 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.TemporalAdjusters;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -36,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class EntidadeBaseApiTest {
 
     private static final String UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -57,6 +60,10 @@ class EntidadeBaseApiTest {
     private InsumoRepository insumoRepository;
     @Autowired
     private EspecialidadeRepository especialidadeRepository;
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+    @Autowired
+    private IdentidadeEmMemoria keycloak;
 
     private long cardio;
 
@@ -110,10 +117,11 @@ class EntidadeBaseApiTest {
 
     @Test
     void auditoria_chamadaDeServico_registraServico() throws Exception {
-        mockMvc.perform(post("/insumos").header("X-Api-Key", "dev-integracao-key").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/insumos").with(Acessos.grupo("service-account-ms-agendamento", Acessos.SERVICO))
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"codigo\":\"LUVA\",\"nome\":\"Luva\",\"unidadeMedida\":\"UN\",\"custoUnitario\":1}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.criadoPor").value("servico"));
+                .andExpect(jsonPath("$.criadoPor").value("service-account-ms-agendamento"));
     }
 
     @Test
@@ -136,6 +144,34 @@ class EntidadeBaseApiTest {
     }
 
     @Test
+    void rn11_inativarEspecialidadeComMedicoAtivo_retorna422ComQuantidade() throws Exception {
+        long medico1 = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        id(criar("/medicos", medicoJson("22245678982", "1002", cardio)));
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.codigo").value("ADM-ESP-002"))
+                .andExpect(jsonPath("$.medicosVinculados").value(2));
+        mockMvc.perform(get("/especialidades/{id}", cardio)).andExpect(jsonPath("$.ativo").value(true));
+
+        // Médico inativo não conta
+        alterarStatus("medicos", medico1, false).andExpect(status().isOk());
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.medicosVinculados").value(1));
+    }
+
+    @Test
+    void rn11_especialidadeSoComMedicosInativos_podeSerInativada() throws Exception {
+        long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        alterarStatus("medicos", medico, false).andExpect(status().isOk());
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativo").value(false));
+    }
+
+    @Test
     void medicoInativo_naoFazLogin_naoRecebeCusto_eAgendaFicaVazia() throws Exception {
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
         criar("/disponibilidades", """
@@ -147,9 +183,8 @@ class EntidadeBaseApiTest {
 
         alterarStatus("medicos", medico, false).andExpect(status().isOk());
 
-        mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"login\":\"11145678920\",\"senha\":\"medicoSenha1\"}"))
-                .andExpect(status().isUnauthorized());
+        // O usuário do Keycloak é desativado junto (não consegue mais fazer login)
+        assertThat(usuarioNoKeycloakAtivo("11145678920")).isFalse();
         mockMvc.perform(post("/custos-medicos").contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"tipo":"CONSULTA","medicoId":%d,"especialidadeId":%d,"valor":100,"vigenciaInicio":"2025-01-01"}
@@ -162,9 +197,7 @@ class EntidadeBaseApiTest {
 
         // Reativar devolve o login
         alterarStatus("medicos", medico, true).andExpect(status().isOk());
-        mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"login\":\"11145678920\",\"senha\":\"medicoSenha1\"}"))
-                .andExpect(status().isOk());
+        assertThat(usuarioNoKeycloakAtivo("11145678920")).isTrue();
     }
 
     @Test
@@ -183,7 +216,7 @@ class EntidadeBaseApiTest {
     void permissoes_seguemAsRegrasDeEscritaDeCadaRecurso() throws Exception {
         long paciente = id(criar("/pacientes", "{\"nome\":\"Ana\",\"cpf\":\"12345678909\",\"dataNascimento\":\"1990-01-01\"}"));
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
-        var recepcao = user("recepcao").roles("FUNCIONARIO");
+        var recepcao = Acessos.grupo("recepcao", "RECEPCIONISTA");
 
         // Funcionário gerencia pacientes, mas não médicos
         mockMvc.perform(patch("/pacientes/{id}/status", paciente).with(recepcao)
@@ -202,11 +235,16 @@ class EntidadeBaseApiTest {
                  "cargo":"ADMINISTRADOR","dataAdmissao":"2024-01-01","senha":"senhaForte1"}
                 """));
 
-        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(user("11122233396").roles("ADMIN"))
+        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(Acessos.grupo("11122233396", "ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ativo\":false}"))
                 .andExpect(status().isUnprocessableEntity());
 
         alterarStatus("xpto", 1, false).andExpect(status().isNotFound());
         alterarStatus("especialidades", 999999, false).andExpect(status().isNotFound());
+    }
+
+    private boolean usuarioNoKeycloakAtivo(String login) {
+        String id = usuarioRepository.findByLogin(login).orElseThrow().getKeycloakId();
+        return keycloak.usuario(id).orElseThrow().ativo;
     }
 }

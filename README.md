@@ -12,7 +12,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
                        │ms-administ.│◀─│ms-agendament│  agendamento chama o administrativo (REST)
                        │   :8081    │  │    :8082    │  para validar médico e paciente
                        └─────┬──────┘  └──────┬──────┘
-                        MySQL próprio (:3307)    MySQL próprio (:3308)
+                     PostgreSQL próprio (:5433)  MySQL próprio (:3308)
                         clinical_administrativo  clinical_agendamento
 ```
 
@@ -21,9 +21,10 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | `common` | – | Biblioteca: exceções, `ErrorResponse`, `BaseEntity`, `BaseExceptionHandler` (handlers de erro reaproveitados pelos módulos) |
 | `ms-administrativo` | 8081 | Especialidades, Médicos e Pacientes |
 | `ms-agendamento` | 8082 | Consultas (agendar, remarcar, cancelar, realizar) |
-| `api-gateway` | 8080 | Ponto de entrada único; roteia por prefixo |
+| `api-gateway` | 8080 | Ponto de entrada único; valida o token do Keycloak e roteia por prefixo |
+| `keycloak` | 8180 | Login, grupos e permissões (realm `clinical`, importado de `keycloak/realm-clinical.json`) |
 
-(Segurança/Keycloak, AWS e Kubernetes ficam para uma etapa futura.)
+(AWS e Kubernetes ficam para uma etapa futura.)
 
 ## Tecnologias e para que servem
 
@@ -34,7 +35,7 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **Spring Boot 3.5** | todos | Sobe a aplicação com configuração automática e servidor web embutido (Tomcat/Netty); empacota tudo num único `.jar` executável. |
 | **Spring Web (MVC)** | serviços | Cria os endpoints REST (`@RestController`, `@GetMapping`...). |
 | **Spring Data JPA + Hibernate** | serviços | Mapeia classes Java (entidades) para tabelas e gera o SQL; os repositories são só interfaces. |
-| **MySQL 8** | docker-compose | Banco relacional. **Um banco por microserviço**: cada serviço é dono dos seus dados e ninguém acessa o banco do outro (só pela API). |
+| **PostgreSQL 17** / **MySQL 8** | docker-compose | Banco relacional. **Um banco por microserviço**: cada serviço é dono dos seus dados e ninguém acessa o banco do outro (só pela API). O `ms-administrativo` usa PostgreSQL; o `ms-agendamento`, MySQL. |
 | **Flyway** | serviços | Versiona o schema do banco com scripts SQL (`db/migration/V1__...sql`) executados automaticamente na subida. O Hibernate só *valida* (`ddl-auto: validate`), nunca altera tabelas. |
 | **Bean Validation (Jakarta)** | serviços | Valida os DTOs com anotações (`@NotBlank`, `@Past`, `@Future`...) quando o controller usa `@Valid`. |
 | **ModelMapper** | serviços | Converte DTO <-> entidade automaticamente, evitando código repetitivo de getters/setters. |
@@ -42,16 +43,17 @@ Backend da clínica médica em **microserviços**. Este repositório traz dois s
 | **SLF4J + Logback** | todos | SLF4J é a API de logs usada no código (`LoggerFactory.getLogger`); o Logback é quem escreve, já incluído no Spring Boot. |
 | **@RestControllerAdvice / @ExceptionHandler** | `exceptions/GlobalExceptionHandler` de cada serviço (herda `BaseExceptionHandler` do `common`) | Ponto único de tratamento de erros (Exception Handling no Spring MVC): converte exceções no JSON padrão (`ErrorResponse`) com o HTTP status correto. |
 | **RestClient** | `ms-agendamento` | Cliente HTTP do Spring para um microserviço chamar outro (aqui, agendamento -> administrativo), com timeouts. |
-| **Spring Cloud Gateway** | `api-gateway` | Porta de entrada única: recebe as requisições e roteia por prefixo (`/administrativo/**`, `/agendamento/**`), sem regra de negócio. Nas rotas futuras é onde entrariam autenticação e CORS. |
+| **Spring Cloud Gateway** | `api-gateway` | Porta de entrada única: recebe as requisições e roteia por prefixo (`/administrativo/**`, `/agendamento/**`), sem regra de negócio. Barra quem chega sem token válido do Keycloak (401); as permissões ficam com cada serviço. |
+| **Keycloak 26** | docker-compose | Servidor de identidade (OAuth2/OpenID Connect): login, senha, grupos e permissões (client roles). Os serviços só validam o token (Spring Security Resource Server); o ms-administrativo cria os usuários pela Admin API e o ms-agendamento pega token com *client credentials*. |
 | **Spring Boot Actuator** | todos | Endpoints de saúde (`/actuator/health`) usados pelos healthchecks do Docker. |
 | **OpenAPI / Swagger** | serviços | O contrato da API (YAML) é a especificação combinada entre os times. |
 | **springdoc-openapi (Swagger UI)** | serviços | Página web interativa (`/swagger-ui.html`) que exibe o contrato e permite testar os endpoints. |
 | **JUnit 5** | testes | Framework de testes (`@Test`, asserções). |
 | **Mockito** | testes | Cria dublês (mocks) de repositories/clients para testar os services isoladamente (testes unitários). |
 | **Spring Boot Test + MockMvc** | testes | Testes de integração: sobem o contexto Spring completo e chamam a API via HTTP simulado. |
-| **H2 (modo MySQL)** | testes | Banco em memória usado só nos testes, para rodarem sem Docker. |
+| **H2** | testes | Banco em memória usado só nos testes, para rodarem sem Docker (modo PostgreSQL no administrativo, modo MySQL no agendamento). |
 | **Docker (multi-stage)** | todos | Empacota cada microserviço numa imagem: o 1º estágio compila com Maven, o 2º só leva o JRE e o `.jar` (imagem menor). |
-| **Docker Compose** | raiz | Sobe todo o ambiente (2 bancos + 3 serviços) com um comando, na ordem certa (healthchecks + `depends_on`). |
+| **Docker Compose** | raiz | Sobe todo o ambiente (bancos, RabbitMQ, Keycloak + 3 serviços) com um comando, na ordem certa (healthchecks + `depends_on`). |
 
 Tipos de teste do projeto: **unitário** (`services/`, Mockito, sem Spring), **integração** (`integration/`, Spring +
 H2), **cliente HTTP** (`client/`, `MockRestServiceServer`) e **contrato** (`contract/`, valida que o YAML OpenAPI é válido).
@@ -81,8 +83,8 @@ Para criar uma API nova: **1)** escreva/atualize o YAML e combine com os outros 
 mvn clean verify
 ```
 
-Roda os testes unitários (JUnit + Mockito), de integração e do contrato OpenAPI. Os de integração usam o contexto Spring completo com H2 em modo MySQL
-(nos testes do agendamento, o `ms-administrativo` é simulado). Não precisa de MySQL/Docker para os testes.
+Roda os testes unitários (JUnit + Mockito), de integração e do contrato OpenAPI. Os de integração usam o contexto Spring completo com H2 imitando o banco de cada serviço
+(nos testes do agendamento, o `ms-administrativo` é simulado). Não precisa de banco nem de Docker para os testes.
 
 ## Gerar as imagens Docker
 
@@ -95,12 +97,39 @@ docker build -f ms-agendamento/Dockerfile    -t clinical/ms-agendamento:latest .
 docker build -f api-gateway/Dockerfile       -t clinical/api-gateway:latest .
 ```
 
+## Credenciais (arquivo `.env`)
+
+Usuários, senhas e segredos (bancos, RabbitMQ e Keycloak) **não ficam no código**: vêm do arquivo `.env` na raiz do repositório, que está no
+`.gitignore` e nunca vai para o git. Antes da primeira execução:
+
+```bash
+cp .env.example .env     # depois edite o .env e troque os valores
+```
+
+| Variável | Para quê |
+|---|---|
+| `ADMINISTRATIVO_DB_USER`, `ADMINISTRATIVO_DB_PASSWORD` | PostgreSQL do ms-administrativo |
+| `AGENDAMENTO_DB_USER`, `AGENDAMENTO_DB_PASSWORD` | MySQL do ms-agendamento |
+| `AGENDAMENTO_DB_ROOT_PASSWORD` | root do MySQL (só o healthcheck do container usa) |
+| `KEYCLOAK_DB_USER`, `KEYCLOAK_DB_PASSWORD` | PostgreSQL do Keycloak |
+| `RABBITMQ_USER`, `RABBITMQ_PASSWORD` | RabbitMQ (também usados pelo ms-administrativo) |
+| `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD` | administrador do console do Keycloak (realm master) |
+| `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` | senha do usuário `admin` do realm `clinical` (usa a API) |
+| `KEYCLOAK_ADMINISTRATIVO_SECRET`, `KEYCLOAK_AGENDAMENTO_SECRET` | segredos dos clients dos serviços (client credentials) |
+
+- O `docker compose` lê o `.env` sozinho e passa os valores para os bancos e para os serviços (`DB_USER`/`DB_PASSWORD`). Se faltar alguma, a subida para com a mensagem `defina <VARIÁVEL> no .env`.
+- Rodando o serviço fora do Docker (IDE ou `mvn spring-boot:run`), o `application.yml` também lê o `.env` (`spring.config.import`). Sem ele e sem `DB_USER`/`DB_PASSWORD` no ambiente, o serviço não sobe e o erro mostra o nome da variável que falta, ex.: `password authentication failed for user "${ADMINISTRATIVO_DB_USER}"`.
+- O banco só cria o usuário na **primeira** subida (volume vazio). Para trocar usuário ou senha de um banco que já existe, troque também dentro dele ou recrie o volume (`docker compose down -v`, que apaga os dados).
+- Fora do ambiente local, não use arquivo: defina as variáveis no próprio ambiente de execução (CI, servidor, orquestrador).
+- Os testes usam H2 em memória e não precisam do `.env`.
+
 ## Executar no Docker
 
 ### Opção 1 — tudo de uma vez (docker compose)
 
 ```bash
-docker compose up -d --build     # sobe 2 MySQL (um por serviço) + 3 serviços (aguarda os healthchecks)
+cp .env.example .env             # só na primeira vez; edite as credenciais
+docker compose up -d --build     # sobe bancos, RabbitMQ, Keycloak e os 3 serviços (aguarda os healthchecks)
 docker compose ps
 docker compose logs -f ms-agendamento
 docker compose down              # para tudo (adicione -v para apagar o banco)
@@ -114,28 +143,31 @@ As imagens usam Eclipse Temurin 25 para compilação e execução (imagens JRE `
 ### Opção 2 — cada serviço como um container (`docker run`)
 
 ```bash
+# carrega as credenciais do .env no terminal atual
+set -a; . ./.env; set +a
+
 # rede para os containers se encontrarem pelo nome
 docker network create clinical-net
 
 # um banco por microserviço
-docker run -d --name mysql-administrativo --network clinical-net -p 3307:3306 \
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=clinical_administrativo \
-  -e MYSQL_USER=clinical -e MYSQL_PASSWORD=clinical mysql:8.4
+docker run -d --name postgres-administrativo --network clinical-net -p 5433:5432 \
+  -e POSTGRES_DB=clinical_administrativo \
+  -e POSTGRES_USER="$ADMINISTRATIVO_DB_USER" -e POSTGRES_PASSWORD="$ADMINISTRATIVO_DB_PASSWORD" postgres:17
 
 docker run -d --name mysql-agendamento --network clinical-net -p 3308:3306 \
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=clinical_agendamento \
-  -e MYSQL_USER=clinical -e MYSQL_PASSWORD=clinical mysql:8.4
+  -e MYSQL_ROOT_PASSWORD="$AGENDAMENTO_DB_ROOT_PASSWORD" -e MYSQL_DATABASE=clinical_agendamento \
+  -e MYSQL_USER="$AGENDAMENTO_DB_USER" -e MYSQL_PASSWORD="$AGENDAMENTO_DB_PASSWORD" mysql:8.4
 
-# aguarde os bancos ficarem prontos (~20s):  docker logs mysql-administrativo  (procure "ready for connections")
+# aguarde os bancos ficarem prontos (~20s):  docker logs postgres-administrativo  (procure "ready to accept connections")
 
 docker run -d --name ms-administrativo --network clinical-net -p 8081:8081 \
-  -e DB_URL="jdbc:mysql://mysql-administrativo:3306/clinical_administrativo?serverTimezone=UTC" \
-  -e DB_USER=clinical -e DB_PASSWORD=clinical \
+  -e DB_URL="jdbc:postgresql://postgres-administrativo:5432/clinical_administrativo" \
+  -e DB_USER="$ADMINISTRATIVO_DB_USER" -e DB_PASSWORD="$ADMINISTRATIVO_DB_PASSWORD" \
   clinical/ms-administrativo:latest
 
 docker run -d --name ms-agendamento --network clinical-net -p 8082:8082 \
   -e DB_URL="jdbc:mysql://mysql-agendamento:3306/clinical_agendamento?serverTimezone=UTC" \
-  -e DB_USER=clinical -e DB_PASSWORD=clinical \
+  -e DB_USER="$AGENDAMENTO_DB_USER" -e DB_PASSWORD="$AGENDAMENTO_DB_PASSWORD" \
   -e ADMINISTRATIVO_URL=http://ms-administrativo:8081 \
   clinical/ms-agendamento:latest
 
@@ -145,26 +177,39 @@ docker run -d --name api-gateway --network clinical-net -p 8080:8080 \
   clinical/api-gateway:latest
 ```
 
-Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysql-agendamento mysql-administrativo && docker network rm clinical-net`
+Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysql-agendamento postgres-administrativo && docker network rm clinical-net`
 
-> Dentro da rede Docker os serviços se falam pelo **nome do container** (`ms-administrativo`, `mysql-administrativo`),
+> Dentro da rede Docker os serviços se falam pelo **nome do container** (`ms-administrativo`, `postgres-administrativo`),
 > nunca por `localhost`. Por isso as URLs são passadas por variável de ambiente.
 
 ### Variáveis de ambiente
 
 | Variável | Serviço | Padrão (execução local) |
 |---|---|---|
-| `DB_URL`, `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | administrativo: `localhost:3307/clinical_administrativo`; agendamento: `localhost:3308/clinical_agendamento`; usuário/senha `clinical` |
+| `DB_URL` | administrativo, agendamento | administrativo: `localhost:5433/clinical_administrativo` (PostgreSQL); agendamento: `localhost:3308/clinical_agendamento` |
+| `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | sem padrão: no compose vêm do `.env`; fora do Docker, do `.env` (`ADMINISTRATIVO_DB_*` / `AGENDAMENTO_DB_*`) |
 | `ADMINISTRATIVO_URL` | agendamento, gateway | `http://localhost:8081` |
 | `AGENDAMENTO_URL` | gateway | `http://localhost:8082` |
 | `SERVER_PORT` | todos | 8081 / 8082 / 8080 |
+| `KEYCLOAK_ISSUER` | administrativo, gateway | `http://localhost:8180/realms/clinical` (o `iss` dos tokens: endereço **público** do Keycloak) |
+| `KEYCLOAK_URL` | administrativo | `http://localhost:8180` (chaves públicas e Admin API) |
+| `KEYCLOAK_CLIENT_SECRET` | administrativo, agendamento | sem padrão: no compose vem do `.env`; fora do Docker, do `.env` (`KEYCLOAK_ADMINISTRATIVO_SECRET` / `KEYCLOAK_AGENDAMENTO_SECRET`) |
+| `KEYCLOAK_JWK_SET_URI` | gateway | `http://localhost:8180/realms/clinical/protocol/openid-connect/certs` |
+| `KEYCLOAK_TOKEN_URI` | agendamento | `http://localhost:8180/realms/clinical/protocol/openid-connect/token` |
+
+> O Keycloak emite todo token com `iss=http://localhost:8180/realms/clinical` (`KC_HOSTNAME`), mesmo quando o
+> serviço pede pela rede interna (`keycloak:8080`). Por isso no compose as chaves e a Admin API usam o endereço
+> interno, mas o issuer validado é o público. Os segredos dos clients e a senha do `admin` do realm não estão no
+> `realm-clinical.json`: ele usa `${KEYCLOAK_...}` e o Keycloak preenche com as variáveis do `.env` no import. O realm
+> só é importado na **primeira** subida; para reimportar, `docker compose down -v` (apaga também os bancos).
 
 ## Executar sem Docker para os serviços (desenvolvimento)
 
-Suba só o banco e rode os serviços pela IDE ou Maven:
+Suba só o banco e rode os serviços pela IDE ou Maven. Os serviços leem as credenciais do mesmo `.env`:
 
 ```bash
-docker compose up -d mysql-administrativo mysql-agendamento
+cp .env.example .env     # só na primeira vez; edite as credenciais
+docker compose up -d postgres-administrativo mysql-agendamento rabbitmq keycloak
 mvn -pl ms-administrativo spring-boot:run
 mvn -pl ms-agendamento spring-boot:run     # em outro terminal
 mvn -pl api-gateway spring-boot:run        # em outro terminal
@@ -173,22 +218,32 @@ mvn -pl api-gateway spring-boot:run        # em outro terminal
 ## Testando a API (via gateway)
 
 ```bash
-# 1. especialidade -> 2. médico -> 3. paciente
-curl -s -X POST localhost:8080/administrativo/especialidades -H 'Content-Type: application/json' \
+# 0. token do Keycloak (admin do realm; direct grant só em desenvolvimento). Requer jq
+set -a; . ./.env; set +a     # carrega as senhas do .env no terminal
+TOKEN=$(curl -s -d grant_type=password -d client_id=clinical-web -d username=admin \
+  -d password="$KEYCLOAK_CLINICAL_ADMIN_PASSWORD" \
+  http://localhost:8180/realms/clinical/protocol/openid-connect/token | jq -r .access_token)
+AUTH="Authorization: Bearer $TOKEN"
+
+# 1. especialidade -> 2. médico (cria também o usuário dele no Keycloak) -> 3. paciente
+curl -s -X POST localhost:8080/administrativo/especialidades -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"nome":"Cardiologia","descricao":"Coração"}'
 
-curl -s -X POST localhost:8080/administrativo/medicos -H 'Content-Type: application/json' \
-  -d '{"nome":"Maria Souza","cpf":"12345678901","dataNascimento":"1985-04-20","crm":"CRM-SP-1","especialidadeId":1}'
+curl -s -X POST localhost:8080/administrativo/medicos -H "$AUTH" -H 'Content-Type: application/json' \
+  -d '{"nome":"Maria Souza","cpf":"12345678909","dataNascimento":"1985-04-20","crm":"CRM-SP-1","ufCrm":"SP",
+       "especialidadeIds":[1],"senha":"senhaForte1"}'
 
-curl -s -X POST localhost:8080/administrativo/pacientes -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8080/administrativo/pacientes -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"nome":"João Pereira","cpf":"98765432100","dataNascimento":"1990-01-15"}'
 
-# 4. agendar consulta (o ms-agendamento valida médico e paciente no ms-administrativo)
-curl -s -X POST localhost:8080/agendamento/consultas -H 'Content-Type: application/json' \
+# 4. agendar consulta (o ms-agendamento valida médico e paciente no ms-administrativo com o próprio token)
+curl -s -X POST localhost:8080/agendamento/consultas -H "$AUTH" -H 'Content-Type: application/json' \
   -d '{"medicoId":1,"pacienteId":1,"dataAgendamento":"2030-05-10T14:30:00","sintomas":"dor de cabeça"}'
 
-curl -s "localhost:8080/agendamento/consultas?status=AGENDADO"
+curl -s "localhost:8080/agendamento/consultas?status=AGENDADO" -H "$AUTH"
 ```
+
+Sem token, o gateway responde 401. A médica cadastrada já consegue pegar o próprio token (`username` = CPF).
 
 Erros seguem sempre o mesmo formato (`timestamp`, `status`, `error`, `message`, `path`, `details[]`):
 400 validação, 404 não encontrado, 409 conflito, 422 regra de negócio, 503 serviço dependente fora do ar.

@@ -41,3 +41,8 @@ build/
 
 ### Chaves JWT ###
 *.pem
+
+### Variáveis de ambiente (credenciais) ###
+.env
+.env.*
+!.env.example

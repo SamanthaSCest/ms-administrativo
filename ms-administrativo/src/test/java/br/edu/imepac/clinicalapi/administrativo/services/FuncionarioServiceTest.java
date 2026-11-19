@@ -5,7 +5,6 @@ import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.FuncionarioResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Cargo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
-import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.entities.Usuario;
 import br.edu.imepac.clinicalapi.administrativo.mapper.FuncionarioMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.FuncionarioRepository;
@@ -17,10 +16,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,11 +60,13 @@ class FuncionarioServiceTest {
     }
 
     @Test
-    void criar_recepcionista_criaUsuarioFuncionario() {
+    void criar_recepcionista_criaUsuarioNoGrupoDoCargo() {
         Usuario usuario = new Usuario();
         usuario.setLogin("11122233396");
-        usuario.setPerfil(Perfil.FUNCIONARIO);
-        when(usuarioService.novoUsuario("11122233396", "funcSenha123", Perfil.FUNCIONARIO)).thenReturn(usuario);
+        usuario.setKeycloakId("kc-7");
+        when(usuarioService.novoUsuario(any(Funcionario.class), eq("funcSenha123"), eq(Set.of("RECEPCIONISTA"))))
+                .thenReturn(usuario);
+        when(usuarioService.grupos(usuario)).thenReturn(List.of("RECEPCIONISTA"));
         when(repository.save(any(Funcionario.class))).thenAnswer(inv -> {
             Funcionario f = inv.getArgument(0);
             f.setId(7L);
@@ -73,18 +78,40 @@ class FuncionarioServiceTest {
         assertThat(response.getId()).isEqualTo(7L);
         assertThat(response.getMatricula()).isEqualTo("F-001");
         assertThat(response.getCargo()).isEqualTo(Cargo.RECEPCIONISTA);
-        assertThat(response.getUsuario().getPerfil()).isEqualTo(Perfil.FUNCIONARIO);
+        assertThat(response.getUsuario().getGrupos()).containsExactly("RECEPCIONISTA");
     }
 
     @Test
-    void criar_administrador_criaUsuarioAdmin() {
+    void criar_administrador_criaUsuarioNoGrupoAdministradorMaisOsExtras() {
         FuncionarioRequest r = request();
         r.setCargo(Cargo.ADMINISTRADOR);
+        r.setGrupos(Set.of("ESTOQUISTA"));
         when(repository.save(any(Funcionario.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.criar(r);
 
-        verify(usuarioService).novoUsuario("11122233396", "funcSenha123", Perfil.ADMIN);
+        verify(usuarioService).novoUsuario(any(Funcionario.class), eq("funcSenha123"),
+                eq(Set.of("ADMINISTRADOR", "ESTOQUISTA")));
+    }
+
+    @Test
+    void atualizar_trocandoCargo_trocaOGrupoDoCargo() {
+        Usuario usuario = new Usuario();
+        usuario.setLogin("11122233396");
+        usuario.setKeycloakId("kc-7");
+        Funcionario atual = new Funcionario();
+        atual.setId(7L);
+        atual.setCpf("11122233396");
+        atual.setCargo(Cargo.RECEPCIONISTA);
+        atual.setUsuario(usuario);
+        when(repository.findById(7L)).thenReturn(Optional.of(atual));
+        when(repository.save(any(Funcionario.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FuncionarioRequest r = request();
+        r.setCargo(Cargo.ESTOQUISTA);
+        service.atualizar(7L, r);
+
+        verify(usuarioService).trocarGrupo(usuario, "RECEPCIONISTA", "ESTOQUISTA");
     }
 
     @Test

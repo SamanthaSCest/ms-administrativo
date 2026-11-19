@@ -16,8 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Gestão de usuários de acesso (somente ADMIN, ver SecurityConfig). Usuários são criados junto com
- * médico, paciente ou funcionário; aqui o administrador consulta e ativa/desativa o acesso.
+ * Usuários de acesso de médicos e funcionários (permissão USUARIO_GERENCIAR, ver SecurityConfig). São criados
+ * junto com médico ou funcionário; aqui o administrador consulta e ativa/desativa. Grupos e permissões de cada
+ * usuário são administrados no Keycloak (ou, para funcionários, pelo campo "grupos" do cadastro).
  */
 @RestController
 @RequestMapping("/usuarios")
@@ -31,6 +32,7 @@ public class UsuarioController {
         return service.listar(pageable);
     }
 
+    /** Inclui os grupos atuais do usuário no Keycloak. */
     @GetMapping("/{id}")
     public UsuarioResponse buscar(@PathVariable Long id) {
         return service.buscar(id);

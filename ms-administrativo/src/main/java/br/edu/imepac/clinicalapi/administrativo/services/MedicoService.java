@@ -2,20 +2,23 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import br.edu.imepac.clinicalapi.administrativo.dto.MedicoBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.entities.Especialidade;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
-import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
 import br.edu.imepac.clinicalapi.administrativo.mapper.MedicoMapper;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
+import br.edu.imepac.clinicalapi.administrativo.repositories.Filtros;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
+import br.edu.imepac.clinicalapi.administrativo.utils.CpfMascara;
 import br.edu.imepac.clinicalapi.common.exception.BusinessRuleException;
 import br.edu.imepac.clinicalapi.common.exception.ConflictException;
 import br.edu.imepac.clinicalapi.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +36,9 @@ public class MedicoService {
     // Níveis: debug (detalhe), info (fluxo normal), warn (erro do cliente), error (falha nossa).
     // Use sempre placeholders {} em vez de concatenar strings.
     private static final Logger log = LoggerFactory.getLogger(MedicoService.class);
+
+    /** Grupo do Keycloak em que todo médico entra (keycloak/realm-clinical.json). */
+    static final String GRUPO_MEDICO = "MEDICO";
 
     private final MedicoRepository repository;
     private final EspecialidadeRepository especialidadeRepository;
@@ -54,22 +60,45 @@ public class MedicoService {
         Medico medico = mapper.toEntity(request);
         // O mapper não preenche as especialidades: buscamos pelos ids informados (422 se algum não existir)
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), Set.of()));
-        // Usuário de acesso (login = CPF), salvo em cascata junto com o médico
-        medico.setUsuario(usuarioService.novoUsuario(request.getCpf(), request.getSenha(), Perfil.MEDICO));
+        // Usuário de acesso no Keycloak (login = CPF, grupo MEDICO); o vínculo é salvo em cascata com o médico
+        medico.setUsuario(usuarioService.novoUsuario(medico, request.getSenha(), Set.of(GRUPO_MEDICO)));
         log.debug("Salvando médico {}", medico.getNome());
         Medico salvo = repository.save(medico);
         eventos.criado(salvo);
-        return mapper.toResponse(salvo);
+        return comGrupos(salvo);
     }
 
+    /** Listagem simples: só a situação (sem dado pessoal na URL). Sem situação, só os ativos. */
     @Transactional(readOnly = true)
-    public Page<MedicoResponse> listar(Pageable pageable) {
-        return repository.findAll(pageable).map(mapper::toResponse);
+    public Page<MedicoResponse> listar(Boolean ativo, Pageable pageable) {
+        return pesquisar(new MedicoBuscaRequest(null, null, null, null, ativo), pageable);
+    }
+
+    /**
+     * Busca por nome (parte, sem diferenciar maiúsculas), CRM, UF do CRM, especialidade e situação.
+     * Listagens sempre devolvem o CPF mascarado (RN20); o CPF completo só sai no GET por id.
+     */
+    @Transactional(readOnly = true)
+    public Page<MedicoResponse> buscar(MedicoBuscaRequest filtro, Pageable pageable) {
+        return pesquisar(filtro, pageable);
+    }
+
+    private Page<MedicoResponse> pesquisar(MedicoBuscaRequest filtro, Pageable pageable) {
+        Specification<Medico> spec = Specification.allOf(
+                Filtros.ativo(filtro.ativo()),
+                Filtros.nomeContem(filtro.nome()),
+                Filtros.crmIgual(filtro.crm()),
+                Filtros.ufCrmIgual(filtro.ufCrm()),
+                Filtros.atendeEspecialidade(filtro.especialidadeId()));
+        return repository.findAll(spec, pageable).map(mapper::toResponse).map(r -> {
+            r.setCpf(CpfMascara.mascarar(r.getCpf()));
+            return r;
+        });
     }
 
     @Transactional(readOnly = true)
     public MedicoResponse buscar(Long id) {
-        return mapper.toResponse(buscarEntidade(id));
+        return comGrupos(buscarEntidade(id));
     }
 
     @Transactional
@@ -86,11 +115,11 @@ public class MedicoService {
         // Copia os campos do request para a entidade já existente (mantém o id)
         mapper.updateEntity(request, medico);
         medico.setEspecialidades(buscarEspecialidades(request.getEspecialidadeIds(), medico.getEspecialidades()));
-        usuarioService.sincronizar(medico, request.getSenha(), Perfil.MEDICO);
+        usuarioService.sincronizar(medico, request.getSenha(), Set.of(GRUPO_MEDICO));
         Medico salvo = repository.save(medico);
         MedicoResponse depois = mapper.toResponse(salvo);
         eventos.atualizado(salvo, antes, depois);
-        return depois;
+        return comGrupos(salvo);
     }
 
     @Transactional
@@ -99,6 +128,7 @@ public class MedicoService {
         Medico medico = buscarEntidade(id);
         // Custos e disponibilidades saem junto (ON DELETE CASCADE); o evento medico.removido cobre os três
         eventos.removido(medico);
+        usuarioService.removerDepoisDoCommit(medico.getUsuario());
         repository.delete(medico);
     }
 
@@ -140,5 +170,14 @@ public class MedicoService {
             especialidades.add(especialidade);
         }
         return especialidades;
+    }
+
+    /** Detalhe: o usuário vem com os grupos atuais do Keycloak. */
+    private MedicoResponse comGrupos(Medico medico) {
+        MedicoResponse r = mapper.toResponse(medico);
+        if (r.getUsuario() != null) {
+            r.getUsuario().setGrupos(usuarioService.grupos(medico.getUsuario()));
+        }
+        return r;
     }
 }

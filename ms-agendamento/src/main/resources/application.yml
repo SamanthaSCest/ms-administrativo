@@ -5,10 +5,15 @@ server:
 spring:
   application:
     name: ms-agendamento
+  # Fora do Docker (IDE, mvn spring-boot:run), lê as credenciais do .env da raiz do repositório
+  # (o diretório de trabalho pode ser o módulo ou a raiz, por isso os dois caminhos)
+  config:
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3308/clinical_agendamento?serverTimezone=UTC}
-    username: ${DB_USER:clinical}
-    password: ${DB_PASSWORD:clinical}
+    # Sem valor padrão: usuário e senha vêm do ambiente (DB_USER/DB_PASSWORD no Docker) ou do .env
+    username: ${DB_USER:${AGENDAMENTO_DB_USER}}
+    password: ${DB_PASSWORD:${AGENDAMENTO_DB_PASSWORD}}
   jpa:
     open-in-view: false  # evita consultas lazy "escondidas" na camada web
     hibernate:
@@ -41,7 +46,11 @@ logging:
 clients:
   administrativo:
     url: ${ADMINISTRATIVO_URL:http://localhost:8081}
-    # Deve ser igual a seguranca.integracao.api-key do ms-administrativo (header X-Api-Key)
-    api-key: ${ADMINISTRATIVO_API_KEY:dev-integracao-key}
     connect-timeout: 2s
     read-timeout: 5s
+  # Token client credentials do Keycloak para chamar o ms-administrativo (client "ms-agendamento")
+  keycloak:
+    token-uri: ${KEYCLOAK_TOKEN_URI:http://localhost:8180/realms/clinical/protocol/openid-connect/token}
+    client-id: ${KEYCLOAK_CLIENT_ID:ms-agendamento}
+    # Sem valor padrão: KEYCLOAK_CLIENT_SECRET no Docker ou KEYCLOAK_AGENDAMENTO_SECRET do .env
+    client-secret: ${KEYCLOAK_CLIENT_SECRET:${KEYCLOAK_AGENDAMENTO_SECRET}}

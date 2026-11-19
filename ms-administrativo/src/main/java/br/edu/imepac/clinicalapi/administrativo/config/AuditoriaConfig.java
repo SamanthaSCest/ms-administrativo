@@ -12,7 +12,8 @@ import java.util.Optional;
 
 /**
  * Auditoria das entidades (EntidadeBase.criadoPor / atualizadoPor): grava o login de quem fez a operação
- * (claim "sub" do JWT, ou "servico" para chamadas com X-Api-Key). Sem usuário autenticado: "sistema".
+ * (claim "preferred_username" do token do Keycloak: o CPF, "admin" ou "service-account-<client>" para outro
+ * microserviço). Sem usuário autenticado: "sistema".
  */
 @Configuration
 @EnableJpaAuditing(auditorAwareRef = "auditorAware")

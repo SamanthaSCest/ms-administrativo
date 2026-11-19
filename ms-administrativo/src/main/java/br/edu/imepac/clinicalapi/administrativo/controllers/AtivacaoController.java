@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * PATCH /{recurso}/{id}/status: ativa ou inativa um cadastro (EntidadeBase.inativar()/reativar()).
  * Quem pode chamar segue as regras de escrita de cada recurso no SecurityConfig
- * (ex.: pacientes -> ADMIN ou FUNCIONARIO; médicos -> ADMIN; insumos -> ADMIN ou ms-estoque).
+ * (permissão *_GERENCIAR do recurso, ex.: pacientes -> PACIENTE_GERENCIAR; insumos -> INSUMO_GERENCIAR).
  * Usuários têm o próprio endpoint: PATCH /usuarios/{id}/status.
  */
 @RestController
