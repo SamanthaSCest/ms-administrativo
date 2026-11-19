@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Envelope padrão de todo evento publicado na exchange adm.events. */
+/** Envelope padrão de cada evento publicado na exchange adm.events. */
 public record EnvelopeEvento(
         UUID eventoId,
         String tipo,

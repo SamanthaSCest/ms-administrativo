@@ -81,7 +81,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(pd);
     }
 
-    // Todo erro padrão do Spring (404 de rota, 405, JSON ilegível...) passa por aqui:
+    // Cada erro padrão do Spring (404 de rota, 405, JSON ilegível...) passa por aqui:
     // garante que a resposta sempre tenha o campo "codigo"
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(

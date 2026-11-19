@@ -29,7 +29,8 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)       // API stateless com token
+                // CSRF desligado de propósito: sem cookie nem sessão, só o header Authorization: Bearer
+                .csrf(ServerHttpSecurity.CsrfSpec::disable) // NOSONAR java:S4502 - API stateless com token Bearer
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .authorizeExchange(auth -> auth

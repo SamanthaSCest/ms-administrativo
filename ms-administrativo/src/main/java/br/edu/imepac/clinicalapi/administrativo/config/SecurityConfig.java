@@ -42,7 +42,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, KeycloakProperties keycloak,
                                                    SegurancaErrorHandler errorHandler) throws Exception {
         http
-                .csrf(AbstractHttpConfigurer::disable)          // API stateless com token: sem cookie de sessão
+                // CSRF desligado de propósito: a API não usa cookie nem sessão, só o header Authorization: Bearer,
+                // que o navegador não envia sozinho; sem cookie, não há o que um site malicioso aproveitar.
+                .csrf(AbstractHttpConfigurer::disable) // NOSONAR java:S4502 - API stateless com token Bearer
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -105,7 +107,7 @@ public class SecurityConfig {
 
     /**
      * Chaves públicas buscadas no endereço configurado (interno no docker-compose), mas o emissor validado é o
-     * público ({@code keycloak.issuer}): o Keycloak assina todo token com o mesmo iss (KC_HOSTNAME).
+     * público ({@code keycloak.issuer}): o Keycloak assina cada token com o mesmo iss (KC_HOSTNAME).
      * O JWKS só é baixado na primeira requisição autenticada (o serviço sobe mesmo com o Keycloak fora do ar).
      */
     @Bean

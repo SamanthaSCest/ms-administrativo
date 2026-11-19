@@ -37,7 +37,7 @@ public class MedicoService {
     // Use sempre placeholders {} em vez de concatenar strings.
     private static final Logger log = LoggerFactory.getLogger(MedicoService.class);
 
-    /** Grupo do Keycloak em que todo médico entra (keycloak/realm-clinical.json). */
+    /** Grupo do Keycloak em que cada médico entra (keycloak/realm-clinical.json). */
     static final String GRUPO_MEDICO = "MEDICO";
 
     private final MedicoRepository repository;
