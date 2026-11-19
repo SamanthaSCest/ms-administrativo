@@ -11,3 +11,4 @@ clients:
   # Sem Keycloak nos testes: as chamadas ao ms-administrativo (que falham de propósito) vão sem token
   keycloak:
     token-uri: ""
+    client-secret: ""

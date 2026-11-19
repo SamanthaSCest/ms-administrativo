@@ -16,11 +16,12 @@ info:
     **não têm login**.
 
     Login, logout e troca de senha são feitos no **Keycloak** (realm `clinical`, local: `http://localhost:8180`).
-    Funcionários e médicos usam o **CPF** como login; o administrador inicial vem do realm (local: `admin`/`admin12345`).
+    Funcionários e médicos usam o **CPF** como login; o administrador inicial é o usuário `admin` do realm (senha
+    definida em `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` no `.env`).
 
     1. No Swagger UI, clique em **Authorize** e use `keycloak` (login na tela do Keycloak, client `clinical-web`).
        Alternativa em desenvolvimento: pegue um token com
-       `curl -d grant_type=password -d client_id=clinical-web -d username=admin -d password=admin12345
+       `curl -d grant_type=password -d client_id=clinical-web -d username=admin -d password=<senha do admin>
        http://localhost:8180/realms/clinical/protocol/openid-connect/token` e cole o `access_token` em `bearerAuth`.
     2. As rotas exigem o header `Authorization: Bearer <token do Keycloak>`. Sem token ou com token
        inválido/expirado: **401**; sem a permissão exigida: **403** (ambos no formato `ProblemDetail`).

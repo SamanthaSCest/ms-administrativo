@@ -97,11 +97,38 @@ docker build -f ms-agendamento/Dockerfile    -t clinical/ms-agendamento:latest .
 docker build -f api-gateway/Dockerfile       -t clinical/api-gateway:latest .
 ```
 
+## Credenciais (arquivo `.env`)
+
+Usuários, senhas e segredos (bancos, RabbitMQ e Keycloak) **não ficam no código**: vêm do arquivo `.env` na raiz do repositório, que está no
+`.gitignore` e nunca vai para o git. Antes da primeira execução:
+
+```bash
+cp .env.example .env     # depois edite o .env e troque os valores
+```
+
+| Variável | Para quê |
+|---|---|
+| `ADMINISTRATIVO_DB_USER`, `ADMINISTRATIVO_DB_PASSWORD` | PostgreSQL do ms-administrativo |
+| `AGENDAMENTO_DB_USER`, `AGENDAMENTO_DB_PASSWORD` | MySQL do ms-agendamento |
+| `AGENDAMENTO_DB_ROOT_PASSWORD` | root do MySQL (só o healthcheck do container usa) |
+| `KEYCLOAK_DB_USER`, `KEYCLOAK_DB_PASSWORD` | PostgreSQL do Keycloak |
+| `RABBITMQ_USER`, `RABBITMQ_PASSWORD` | RabbitMQ (também usados pelo ms-administrativo) |
+| `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD` | administrador do console do Keycloak (realm master) |
+| `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` | senha do usuário `admin` do realm `clinical` (usa a API) |
+| `KEYCLOAK_ADMINISTRATIVO_SECRET`, `KEYCLOAK_AGENDAMENTO_SECRET` | segredos dos clients dos serviços (client credentials) |
+
+- O `docker compose` lê o `.env` sozinho e passa os valores para os bancos e para os serviços (`DB_USER`/`DB_PASSWORD`). Se faltar alguma, a subida para com a mensagem `defina <VARIÁVEL> no .env`.
+- Rodando o serviço fora do Docker (IDE ou `mvn spring-boot:run`), o `application.yml` também lê o `.env` (`spring.config.import`). Sem ele e sem `DB_USER`/`DB_PASSWORD` no ambiente, o serviço não sobe e o erro mostra o nome da variável que falta, ex.: `password authentication failed for user "${ADMINISTRATIVO_DB_USER}"`.
+- O banco só cria o usuário na **primeira** subida (volume vazio). Para trocar usuário ou senha de um banco que já existe, troque também dentro dele ou recrie o volume (`docker compose down -v`, que apaga os dados).
+- Fora do ambiente local, não use arquivo: defina as variáveis no próprio ambiente de execução (CI, servidor, orquestrador).
+- Os testes usam H2 em memória e não precisam do `.env`.
+
 ## Executar no Docker
 
 ### Opção 1 — tudo de uma vez (docker compose)
 
 ```bash
+cp .env.example .env             # só na primeira vez; edite as credenciais
 docker compose up -d --build     # sobe bancos, RabbitMQ, Keycloak e os 3 serviços (aguarda os healthchecks)
 docker compose ps
 docker compose logs -f ms-agendamento
@@ -116,28 +143,31 @@ As imagens usam Eclipse Temurin 25 para compilação e execução (imagens JRE `
 ### Opção 2 — cada serviço como um container (`docker run`)
 
 ```bash
+# carrega as credenciais do .env no terminal atual
+set -a; . ./.env; set +a
+
 # rede para os containers se encontrarem pelo nome
 docker network create clinical-net
 
 # um banco por microserviço
 docker run -d --name postgres-administrativo --network clinical-net -p 5433:5432 \
   -e POSTGRES_DB=clinical_administrativo \
-  -e POSTGRES_USER=clinical -e POSTGRES_PASSWORD=clinical postgres:17
+  -e POSTGRES_USER="$ADMINISTRATIVO_DB_USER" -e POSTGRES_PASSWORD="$ADMINISTRATIVO_DB_PASSWORD" postgres:17
 
 docker run -d --name mysql-agendamento --network clinical-net -p 3308:3306 \
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=clinical_agendamento \
-  -e MYSQL_USER=clinical -e MYSQL_PASSWORD=clinical mysql:8.4
+  -e MYSQL_ROOT_PASSWORD="$AGENDAMENTO_DB_ROOT_PASSWORD" -e MYSQL_DATABASE=clinical_agendamento \
+  -e MYSQL_USER="$AGENDAMENTO_DB_USER" -e MYSQL_PASSWORD="$AGENDAMENTO_DB_PASSWORD" mysql:8.4
 
 # aguarde os bancos ficarem prontos (~20s):  docker logs postgres-administrativo  (procure "ready to accept connections")
 
 docker run -d --name ms-administrativo --network clinical-net -p 8081:8081 \
   -e DB_URL="jdbc:postgresql://postgres-administrativo:5432/clinical_administrativo" \
-  -e DB_USER=clinical -e DB_PASSWORD=clinical \
+  -e DB_USER="$ADMINISTRATIVO_DB_USER" -e DB_PASSWORD="$ADMINISTRATIVO_DB_PASSWORD" \
   clinical/ms-administrativo:latest
 
 docker run -d --name ms-agendamento --network clinical-net -p 8082:8082 \
   -e DB_URL="jdbc:mysql://mysql-agendamento:3306/clinical_agendamento?serverTimezone=UTC" \
-  -e DB_USER=clinical -e DB_PASSWORD=clinical \
+  -e DB_USER="$AGENDAMENTO_DB_USER" -e DB_PASSWORD="$AGENDAMENTO_DB_PASSWORD" \
   -e ADMINISTRATIVO_URL=http://ms-administrativo:8081 \
   clinical/ms-agendamento:latest
 
@@ -156,26 +186,29 @@ Parar e remover: `docker rm -f api-gateway ms-agendamento ms-administrativo mysq
 
 | Variável | Serviço | Padrão (execução local) |
 |---|---|---|
-| `DB_URL`, `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | administrativo: `localhost:5433/clinical_administrativo` (PostgreSQL); agendamento: `localhost:3308/clinical_agendamento`; usuário/senha `clinical` |
+| `DB_URL` | administrativo, agendamento | administrativo: `localhost:5433/clinical_administrativo` (PostgreSQL); agendamento: `localhost:3308/clinical_agendamento` |
+| `DB_USER`, `DB_PASSWORD` | administrativo, agendamento | sem padrão: no compose vêm do `.env`; fora do Docker, do `.env` (`ADMINISTRATIVO_DB_*` / `AGENDAMENTO_DB_*`) |
 | `ADMINISTRATIVO_URL` | agendamento, gateway | `http://localhost:8081` |
 | `AGENDAMENTO_URL` | gateway | `http://localhost:8082` |
 | `SERVER_PORT` | todos | 8081 / 8082 / 8080 |
 | `KEYCLOAK_ISSUER` | administrativo, gateway | `http://localhost:8180/realms/clinical` (o `iss` dos tokens: endereço **público** do Keycloak) |
-| `KEYCLOAK_URL`, `KEYCLOAK_CLIENT_SECRET` | administrativo | `http://localhost:8180`, `dev-ms-administrativo-secret` (chaves públicas e Admin API) |
+| `KEYCLOAK_URL` | administrativo | `http://localhost:8180` (chaves públicas e Admin API) |
+| `KEYCLOAK_CLIENT_SECRET` | administrativo, agendamento | sem padrão: no compose vem do `.env`; fora do Docker, do `.env` (`KEYCLOAK_ADMINISTRATIVO_SECRET` / `KEYCLOAK_AGENDAMENTO_SECRET`) |
 | `KEYCLOAK_JWK_SET_URI` | gateway | `http://localhost:8180/realms/clinical/protocol/openid-connect/certs` |
-| `KEYCLOAK_TOKEN_URI`, `KEYCLOAK_CLIENT_SECRET` | agendamento | `http://localhost:8180/realms/clinical/protocol/openid-connect/token`, `dev-ms-agendamento-secret` |
+| `KEYCLOAK_TOKEN_URI` | agendamento | `http://localhost:8180/realms/clinical/protocol/openid-connect/token` |
 
 > O Keycloak emite todo token com `iss=http://localhost:8180/realms/clinical` (`KC_HOSTNAME`), mesmo quando o
 > serviço pede pela rede interna (`keycloak:8080`). Por isso no compose as chaves e a Admin API usam o endereço
-> interno, mas o issuer validado é o público. Os segredos `dev-*` são só para desenvolvimento: em outro ambiente,
-> gere novos no Keycloak e passe por variável. O realm só é importado na **primeira** subida; para reimportar,
-> `docker compose down -v` (apaga também os bancos).
+> interno, mas o issuer validado é o público. Os segredos dos clients e a senha do `admin` do realm não estão no
+> `realm-clinical.json`: ele usa `${KEYCLOAK_...}` e o Keycloak preenche com as variáveis do `.env` no import. O realm
+> só é importado na **primeira** subida; para reimportar, `docker compose down -v` (apaga também os bancos).
 
 ## Executar sem Docker para os serviços (desenvolvimento)
 
-Suba só o banco e rode os serviços pela IDE ou Maven:
+Suba só o banco e rode os serviços pela IDE ou Maven. Os serviços leem as credenciais do mesmo `.env`:
 
 ```bash
+cp .env.example .env     # só na primeira vez; edite as credenciais
 docker compose up -d postgres-administrativo mysql-agendamento rabbitmq keycloak
 mvn -pl ms-administrativo spring-boot:run
 mvn -pl ms-agendamento spring-boot:run     # em outro terminal
@@ -186,7 +219,9 @@ mvn -pl api-gateway spring-boot:run        # em outro terminal
 
 ```bash
 # 0. token do Keycloak (admin do realm; direct grant só em desenvolvimento). Requer jq
-TOKEN=$(curl -s -d grant_type=password -d client_id=clinical-web -d username=admin -d password=admin12345 \
+set -a; . ./.env; set +a     # carrega as senhas do .env no terminal
+TOKEN=$(curl -s -d grant_type=password -d client_id=clinical-web -d username=admin \
+  -d password="$KEYCLOAK_CLINICAL_ADMIN_PASSWORD" \
   http://localhost:8180/realms/clinical/protocol/openid-connect/token | jq -r .access_token)
 AUTH="Authorization: Bearer $TOKEN"
 

@@ -105,7 +105,7 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "dev-ms-administrativo-secret",
+      "secret": "${KEYCLOAK_ADMINISTRATIVO_SECRET}",
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -120,7 +120,7 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "dev-ms-agendamento-secret",
+      "secret": "${KEYCLOAK_AGENDAMENTO_SECRET}",
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -175,7 +175,7 @@
       "firstName": "Administrador",
       "lastName": "Inicial",
       "credentials": [
-        { "type": "password", "value": "admin12345", "temporary": false }
+        { "type": "password", "value": "${KEYCLOAK_CLINICAL_ADMIN_PASSWORD}", "temporary": false }
       ],
       "groups": ["/ADMINISTRADOR"]
     },

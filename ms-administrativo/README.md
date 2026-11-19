@@ -86,7 +86,7 @@ Keycloak (realm clinical): usuário (username = CPF, senha, enabled) ── grup
 - Cadastrar cria o usuário no Keycloak (Admin API, `identidade/KeycloakProvedorIdentidade`). Atualizar sincroniza login, nome, e-mail e, se vier, a senha. Inativar ou desativar desliga o usuário no Keycloak. Remover apaga o usuário lá depois do commit.
 - O Keycloak não participa da transação do banco: se a gravação falhar depois de criar o usuário no Keycloak, ele é apagado lá (compensação em `UsuarioService`). Se o Keycloak estiver fora do ar, a operação devolve 503 e nada é gravado.
 - Um mesmo CPF só pode ter um usuário: cadastrar um médico com o CPF de um funcionário retorna 409. Um funcionário pode ter o mesmo CPF de um paciente.
-- O **administrador inicial** (`admin`/`admin12345` em desenvolvimento) vem do realm, sem pessoa vinculada. Outros admins são funcionários com `"cargo": "ADMINISTRADOR"`.
+- O **administrador inicial** (usuário `admin`, senha em `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` do `.env`) vem do realm, sem pessoa vinculada. Outros admins são funcionários com `"cargo": "ADMINISTRADOR"`.
 - Migration `V15__keycloak_usuarios.sql`: remove as tabelas de grupos e permissões e a senha local. Usuários criados antes do Keycloak ficam sem `keycloak_id` e são recriados lá quando o cadastro recebe uma senha num PUT (a senha antiga não migra).
 
 ### Endpoints
@@ -110,7 +110,7 @@ Login, logout e troca de senha são feitos no Keycloak (tela de login ou endpoin
   - `ESTOQUISTA`: gerencia insumos; consulta procedimentos e salas.
   - `RESPONSAVEL_FINANCEIRO`: gerencia custos dos médicos; consulta convênios, procedimentos, insumos, médicos, especialidades e pacientes.
   - `MEDICO`: consulta pacientes, médicos, especialidades, convênios, salas, procedimentos, insumos e disponibilidades.
-- Criar grupos, mudar as roles de um grupo ou dar uma role avulsa a alguém é feito no console do Keycloak (http://localhost:8180, `admin`/`admin`). Para valer em outros ambientes, atualize também o `realm-clinical.json`. Uma permissão **nova** precisa existir no enum `Permissao` e no realm (o `RbacApiTest` confere os dois).
+- Criar grupos, mudar as roles de um grupo ou dar uma role avulsa a alguém é feito no console do Keycloak (http://localhost:8180, com `KEYCLOAK_ADMIN`/`KEYCLOAK_ADMIN_PASSWORD` do `.env`). Para valer em outros ambientes, atualize também o `realm-clinical.json`. Uma permissão **nova** precisa existir no enum `Permissao` e no realm (o `RbacApiTest` confere os dois).
 - A matriz completa está na descrição do contrato (`static/contract/openapi-administrativo.yaml`) e as regras por rota em `config/SecurityConfig`.
 
 ### Como funciona
@@ -121,7 +121,9 @@ Login, logout e troca de senha são feitos no Keycloak (tela de login ou endpoin
 - Swagger UI: http://localhost:8081/swagger-ui.html → botão **Authorize** → `keycloak` (login no Keycloak). Também dá para colar um token em `bearerAuth`:
 
 ```bash
-curl -s -d grant_type=password -d client_id=clinical-web -d username=admin -d password=admin12345 \
+set -a; . ./.env; set +a     # na raiz do repositório: carrega as senhas do .env
+curl -s -d grant_type=password -d client_id=clinical-web -d username=admin \
+  -d password="$KEYCLOAK_CLINICAL_ADMIN_PASSWORD" \
   http://localhost:8180/realms/clinical/protocol/openid-connect/token
 ```
 
@@ -130,7 +132,9 @@ curl -s -d grant_type=password -d client_id=clinical-web -d username=admin -d pa
 | `KEYCLOAK_URL` | `http://localhost:8180` | Onde este serviço busca as chaves e chama a Admin API (no compose, `http://keycloak:8080`) |
 | `KEYCLOAK_ISSUER` | `http://localhost:8180/realms/clinical` | `iss` esperado no token (endereço **público** do Keycloak) |
 | `KEYCLOAK_REALM` | `clinical` | Realm |
-| `KEYCLOAK_CLIENT_ID` / `KEYCLOAK_CLIENT_SECRET` | `ms-administrativo` / `dev-ms-administrativo-secret` | Client das roles e da service account da Admin API |
+| `KEYCLOAK_CLIENT_ID` | `ms-administrativo` | Client das roles e da service account da Admin API |
+| `KEYCLOAK_CLIENT_SECRET` | sem padrão (fora do Docker, `KEYCLOAK_ADMINISTRATIVO_SECRET` do `.env`) | Segredo desse client |
+| `DB_USER` / `DB_PASSWORD`, `RABBITMQ_USER` / `RABBITMQ_PASSWORD` | sem padrão (vêm do `.env`) | Banco e RabbitMQ; ver "Credenciais" no README da raiz |
 
 Nos testes não há Keycloak: `support/IdentidadeEmMemoria` substitui a Admin API e o token vem pronto. `@ComGrupo("RECEPCIONISTA")` (classe ou método) e `.with(Acessos.grupo("dr", "MEDICO"))` (por requisição) montam um token com as roles reais do grupo, lidas do `realm-clinical.json`. `"SERVICO"` simula a service account do ms-agendamento. A sincronização com o Keycloak está em `AuthApiIntegrationTest`, o RBAC em `RbacApiTest` e as chamadas HTTP à Admin API em `KeycloakProvedorIdentidadeTest`.
 
