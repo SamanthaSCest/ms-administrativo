@@ -216,7 +216,7 @@ Outras leituras úteis para os outros grupos (também liberadas para a service a
 ### Como outro microserviço se conecta (passo a passo)
 
 1. **Endereço**: dentro do docker compose, `http://ms-administrativo:8081`; pelo gateway, `http://localhost:8080/administrativo/...`.
-2. **Cabeçalho**: envie `X-Api-Key: <chave>` em toda chamada. Em desenvolvimento a chave é `dev-integracao-key`; no ambiente de vocês, a variável `INTEGRACAO_API_KEY` deste serviço deve ter o mesmo valor configurado no cliente. Sem a chave (ou com a chave errada) a resposta é **401**.
+2. **Autenticação (Keycloak, client credentials)**: cada microserviço tem um client próprio no realm `clinical` do Keycloak (hoje existe o `ms-agendamento`; peçam ao grupo do ms-administrativo para criar o de vocês, com as permissões que o serviço precisa). Com o id e o segredo do client, peçam um token em `POST http://keycloak:8080/realms/clinical/protocol/openid-connect/token` (fora do Docker, `http://localhost:8180/...`) com `grant_type=client_credentials`, e enviem `Authorization: Bearer <token>` em toda chamada. O token vale 15 minutos: guardem e renovem antes de expirar. Em Java, a classe `ClientCredentialsTokenProvider` do módulo `common` já faz isso (exemplo de uso em `ms-agendamento/.../config/RestClientConfig.java`). O segredo do client fica no `.env`, nunca no código.
 3. **Ids**: guarde o `id` numérico (`Long`) que vem nas respostas. O `uuid` também vem, mas as rotas usam o `id`.
 4. **Erros** saem no formato Problem Details (RFC 9457), com os campos extras `codigo` e, na validação, `campos`:
 
@@ -224,13 +224,16 @@ Outras leituras úteis para os outros grupos (também liberadas para a service a
    {"type":"about:blank","title":"Not Found","status":404,"detail":"Paciente não encontrado(a): 99","instance":"/integracao/pacientes/99","codigo":"ADM-GEN-404"}
    ```
 
-   Os status seguem a regra: 400 validação, 401 sem chave, 403 perfil sem permissão, 404 não existe, 409 conflito, 422 regra de negócio. As rotas `/situacao` respondem **200** mesmo quando o id não existe (`existe: false`).
+   Os status seguem a regra: 400 validação, 401 sem token ou token inválido/expirado, 403 o client não tem a permissão da rota, 404 não existe, 409 conflito, 422 regra de negócio, 503 serviço dependente fora do ar. As rotas `/situacao` respondem **200** mesmo quando o id não existe (`existe: false`).
 5. **Contrato**: o OpenAPI completo fica em `/contract/openapi-administrativo.yaml` e o Swagger em `/swagger-ui.html`, ambos sem autenticação.
 
 Exemplo:
 
 ```bash
-curl -H "X-Api-Key: dev-integracao-key" http://localhost:8080/administrativo/integracao/medicos/1/situacao
+set -a; . ./.env; set +a     # na raiz do repositório: carrega o segredo do client
+TOKEN=$(curl -s -u "ms-agendamento:$KEYCLOAK_AGENDAMENTO_SECRET" -d grant_type=client_credentials \
+  http://localhost:8180/realms/clinical/protocol/openid-connect/token | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/administrativo/integracao/medicos/1/situacao
 ```
 
 ### Eventos publicados (exchange `adm.events`, tipo topic, routing key = tipo do evento)
