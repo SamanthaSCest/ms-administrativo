@@ -118,6 +118,72 @@ class ProcedimentoInsumoApiTest {
         mockMvc.perform(delete("/insumos/{id}", gaze)).andExpect(status().isNoContent());
     }
 
+    /** Exame: mesmo cadastro, com tipo EXAME e código TUSS próprio. */
+    private String exameJson(long especialidadeId, String tipo) {
+        return """
+                {"especialidadeId":%d,%s"codigoTuss":"40304361","nome":"Hemograma completo","duracaoMinutos":15,
+                 "valorBase":35.00,"insumos":[]}
+                """.formatted(especialidadeId, tipo == null ? "" : "\"tipo\":\"%s\",".formatted(tipo));
+    }
+
+    @Test
+    void exame_cadastradoJuntoAosProcedimentos_eFiltradoPorTipo() throws Exception {
+        long esp = especialidade();
+        // Sem tipo: continua sendo procedimento (quem já usa a API não precisa mudar nada)
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(procedimentoJson(esp, "[]")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("PROCEDIMENTO"));
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "EXAME")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("EXAME"))
+                .andExpect(jsonPath("$.codigoTuss").value("40304361"));
+
+        mockMvc.perform(get("/procedimentos").param("tipo", "EXAME"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].nome").value("Hemograma completo"));
+        mockMvc.perform(get("/procedimentos").param("tipo", "PROCEDIMENTO"))
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].nome").value("Biópsia de pele"));
+        // Sem filtro: os dois
+        mockMvc.perform(get("/procedimentos")).andExpect(jsonPath("$.content", hasSize(2)));
+    }
+
+    @Test
+    void exame_atualizarSemTipo_mantemExame_eComTipo_troca() throws Exception {
+        long esp = especialidade();
+        long id = id(mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "EXAME")))
+                .andExpect(status().isCreated()).andReturn());
+
+        mockMvc.perform(put("/procedimentos/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, null).replace("35.00", "40.00")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("EXAME"))
+                .andExpect(jsonPath("$.valorBase").value(40.00));
+        mockMvc.perform(put("/procedimentos/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "PROCEDIMENTO")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("PROCEDIMENTO"));
+    }
+
+    @Test
+    void exame_tussUnicoEntreProcedimentosEExames_eTipoInvalido() throws Exception {
+        long esp = especialidade();
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                .content(procedimentoJson(esp, "[]"))).andExpect(status().isCreated());
+        // Mesmo código TUSS do procedimento já cadastrado, agora como exame: 409
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(procedimentoJson(esp, "[]").replace("\"codigoTuss\"", "\"tipo\":\"EXAME\",\"codigoTuss\"")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/procedimentos").contentType(MediaType.APPLICATION_JSON)
+                        .content(exameJson(esp, "LABORATORIO")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/procedimentos").param("tipo", "LABORATORIO")).andExpect(status().isBadRequest());
+    }
+
     @Test
     void procedimento_insumoRepetido_retorna422() throws Exception {
         long luva = insumo("LUVA", "2.50");

@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import br.edu.imepac.clinicalapi.administrativo.entities.TipoProcedimento;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -21,6 +22,11 @@ public class ProcedimentoRequest {
 
     @NotNull(message = "é obrigatório")
     private Long especialidadeId;
+
+    /**
+     * PROCEDIMENTO ou EXAME (opcional). Sem ele: PROCEDIMENTO no cadastro; na atualização, o tipo atual não muda.
+     */
+    private TipoProcedimento tipo;
 
     @NotBlank(message = "é obrigatório")
     @Size(max = 20, message = "deve ter no máximo 20 caracteres")

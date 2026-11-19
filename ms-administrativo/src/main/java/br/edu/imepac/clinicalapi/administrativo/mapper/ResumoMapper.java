@@ -75,7 +75,7 @@ public class ResumoMapper {
                     CpfMascara.mascarar(x.getCpf()), x.getParentesco(), x.isAtivo());
             case Insumo x -> new InsumoResumo(x.getId(), x.getUuid(), x.getCodigo(), x.getNome(), x.getUnidadeMedida(),
                     x.getCustoUnitario(), x.isAtivo());
-            case Procedimento x -> new ProcedimentoResumo(x.getId(), x.getUuid(), x.getCodigoTuss(), x.getNome(),
+            case Procedimento x -> new ProcedimentoResumo(x.getId(), x.getUuid(), x.getTipo(), x.getCodigoTuss(), x.getNome(),
                     x.getEspecialidade().getId(), x.getDuracaoMinutos(), x.getValorBase(), x.isAtivo());
             case CustoMedico x -> custo(x);
             case DisponibilidadeMedica x -> disponibilidade(x);
