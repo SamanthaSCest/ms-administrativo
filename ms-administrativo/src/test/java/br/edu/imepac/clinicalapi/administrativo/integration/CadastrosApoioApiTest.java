@@ -131,10 +131,15 @@ class CadastrosApoioApiTest {
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"numero\":\"S1\",\"tipo\":\"COZINHA\"}"))
                 .andExpect(status().isBadRequest());
-        // EXAME deixou de existir: tipos válidos são CONSULTORIO, CIRURGIA e PROCEDIMENTO
+    }
+
+    @Test
+    void sala_deExame() throws Exception {
+        // EXAME voltou na V16, junto com os exames no cadastro de procedimentos
         mockMvc.perform(post("/salas").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"numero\":\"S1\",\"tipo\":\"EXAME\"}"))
-                .andExpect(status().isBadRequest());
+                        .content("{\"numero\":\"E1\",\"tipo\":\"EXAME\",\"observacoes\":\"Eletrocardiógrafo\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tipo").value("EXAME"));
     }
 
     @Test

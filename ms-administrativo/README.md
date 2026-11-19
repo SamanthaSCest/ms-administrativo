@@ -147,13 +147,13 @@ Nos testes não há Keycloak: `support/IdentidadeEmMemoria` substitui a Admin AP
 | `Medico` | `medicos`, `medico_especialidades` | `/medicos` | `ufCrm`; **várias especialidades** (`especialidadeIds`); CRM único por UF |
 | `Funcionario` | `funcionarios` | `/funcionarios` | `cargo` (enum `Cargo`) define o grupo de acesso padrão |
 | `Convenio` | `convenios` | `/convenios` | registro ANS e CNPJ únicos (CNPJ validado) |
-| `Sala` | `salas` | `/salas` | `numero` único, `tipo` (CONSULTORIO, CIRURGIA ou PROCEDIMENTO), `andar` e `observacoes`; não remove com disponibilidades |
+| `Sala` | `salas` | `/salas` | `numero` único, `tipo` (CONSULTORIO, CIRURGIA, PROCEDIMENTO ou EXAME), `andar` e `observacoes`; não remove com disponibilidades |
 | `Insumo` | `insumos` | `/insumos`, `PATCH /insumos/{id}/custo` | código único; **outros microserviços podem escrever** (client credentials) |
-| `Procedimento` + `InsumoProcedimento` | `procedimentos`, `insumos_procedimento` | `/procedimentos` | código TUSS único; insumos sem repetição; resposta traz `custoInsumos` |
+| `Procedimento` + `InsumoProcedimento` | `procedimentos`, `insumos_procedimento` | `/procedimentos` | procedimentos **e exames** (`tipo`: PROCEDIMENTO ou EXAME; `?tipo=` filtra a listagem; omitido, PROCEDIMENTO no cadastro e mantido no PUT); código TUSS único entre os dois; insumos sem repetição; resposta traz `custoInsumos` |
 | `CustoMedico` → `CustoMedicoConsulta` / `CustoMedicoProcedimento` | `custos_medicos` (SINGLE_TABLE) | `/custos-medicos`, `/custos-medicos/vigente` | médico precisa atender a especialidade; vigências não se sobrepõem (409) |
 | `DisponibilidadeMedica` → `DisponibilidadeDiaria` / `DisponibilidadeExcecao` | `disponibilidades_medicas` (SINGLE_TABLE) | `/disponibilidades`, `/disponibilidades/agenda` | cadastrada pelo ADMIN; sem sobreposição do médico nem da sala (409); a agenda do dia aplica bloqueios e horários extras |
 
-Enums: `Sexo`, `Cargo`, `TipoSala`, `DiaSemana`, `UF`. Custos e disponibilidades são **composição** do médico: removidos junto com ele (`ON DELETE CASCADE`). Migrations V4 a V9.
+Enums: `Sexo`, `Cargo`, `TipoSala`, `TipoProcedimento`, `DiaSemana`, `UF`. Custos e disponibilidades são **composição** do médico: removidos junto com ele (`ON DELETE CASCADE`). Migrations V4 a V9.
 
 ### EntidadeBase (uuid, ativo e auditoria)
 

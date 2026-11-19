@@ -1,16 +1,19 @@
 package br.edu.imepac.clinicalapi.administrativo.dto;
 
+import br.edu.imepac.clinicalapi.administrativo.entities.TipoProcedimento;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.List;
 
 /**
- * DTO de SAÍDA do procedimento, com os insumos e o custo total deles (calcularCustoInsumos()).
+ * DTO de SAÍDA do procedimento ou exame (tipo), com os insumos e o custo total deles (calcularCustoInsumos()).
  */
 public record ProcedimentoResponse(
         Long id,
         EspecialidadeResponse especialidade,
+        TipoProcedimento tipo,
         String codigoTuss,
         String nome,
         String descricao,

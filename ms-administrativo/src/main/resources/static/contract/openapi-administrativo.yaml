@@ -84,7 +84,7 @@ tags:
   - name: Insumos
     description: Mantidos também por outros microserviços (client credentials)
   - name: Procedimentos
-    description: Procedimentos (código TUSS) e os insumos que consomem
+    description: Procedimentos e exames (código TUSS, campo tipo) e os insumos que consomem
   - name: Custos dos médicos
     description: Valor de consulta (por especialidade) ou de procedimento, com vigência
   - name: Disponibilidades
@@ -1616,9 +1616,15 @@ paths:
   /procedimentos:
     get:
       tags: [Procedimentos]
-      summary: Lista procedimentos (paginado)
+      summary: Lista procedimentos e exames (paginado)
       operationId: listarProcedimentos
       parameters:
+        - name: tipo
+          in: query
+          required: false
+          description: Só procedimentos ou só exames. Sem ele, traz os dois. Valor inválido -> 400.
+          schema:
+            $ref: '#/components/schemas/TipoProcedimento'
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
         - $ref: '#/components/parameters/Sort'
@@ -1631,7 +1637,7 @@ paths:
                 $ref: '#/components/schemas/ProcedimentoPage'
     post:
       tags: [Procedimentos]
-      summary: Cadastra um procedimento com seus insumos
+      summary: Cadastra um procedimento ou exame (tipo) com seus insumos
       operationId: criarProcedimento
       requestBody:
         required: true
@@ -2982,7 +2988,13 @@ components:
       description: Cargo do funcionário. Define o grupo de acesso padrão (grupo com o mesmo nome)
     TipoSala:
       type: string
-      enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO]
+      enum: [CONSULTORIO, CIRURGIA, PROCEDIMENTO, EXAME]
+    TipoProcedimento:
+      type: string
+      enum: [PROCEDIMENTO, EXAME]
+      description: |
+        Exames são cadastrados junto aos procedimentos, com os mesmos campos (TUSS, especialidade, duração, valor
+        base, insumos e custos dos médicos). PROCEDIMENTO: clínico ou cirúrgico; EXAME: ex. hemograma, ECG.
     DiaSemana:
       type: string
       enum: [DOMINGO, SEGUNDA, TERCA, QUARTA, QUINTA, SEXTA, SABADO]
@@ -3316,10 +3328,15 @@ components:
         especialidadeId:
           type: integer
           format: int64
+        tipo:
+          allOf:
+            - $ref: '#/components/schemas/TipoProcedimento'
+          description: |
+            Opcional. Sem ele: PROCEDIMENTO no cadastro; na atualização (PUT), o tipo atual não muda.
         codigoTuss:
           type: string
           maxLength: 20
-          description: Único
+          description: Único entre procedimentos e exames
           example: '30101012'
         nome:
           type: string
@@ -3372,6 +3389,8 @@ components:
           description: Login de quem fez a última alteração
         especialidade:
           $ref: '#/components/schemas/EspecialidadeResponse'
+        tipo:
+          $ref: '#/components/schemas/TipoProcedimento'
         codigoTuss:
           type: string
         nome:
