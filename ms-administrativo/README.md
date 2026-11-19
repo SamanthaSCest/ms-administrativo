@@ -172,6 +172,26 @@ Escopo do grupo: só o ms-administrativo (os demais microserviços são de outro
 
 Outras leituras úteis para os outros grupos (também liberadas para `X-Api-Key`): `GET /disponibilidades/agenda?medicoId=&data=`, `GET /custos-medicos/vigente`, `GET /insumos` (o ms-estoque também escreve em `/insumos`).
 
+### Como outro microserviço se conecta (passo a passo)
+
+1. **Endereço**: dentro do docker compose, `http://ms-administrativo:8081`; pelo gateway, `http://localhost:8080/administrativo/...`.
+2. **Cabeçalho**: envie `X-Api-Key: <chave>` em toda chamada. Em desenvolvimento a chave é `dev-integracao-key`; no ambiente de vocês, a variável `INTEGRACAO_API_KEY` deste serviço deve ter o mesmo valor configurado no cliente. Sem a chave (ou com a chave errada) a resposta é **401**.
+3. **Ids**: guarde o `id` numérico (`Long`) que vem nas respostas. O `uuid` também vem, mas as rotas usam o `id`.
+4. **Erros** saem no formato Problem Details (RFC 9457), com os campos extras `codigo` e, na validação, `campos`:
+
+   ```json
+   {"type":"about:blank","title":"Not Found","status":404,"detail":"Paciente não encontrado(a): 99","instance":"/integracao/pacientes/99","codigo":"ADM-GEN-404"}
+   ```
+
+   Os status seguem a regra: 400 validação, 401 sem chave, 403 perfil sem permissão, 404 não existe, 409 conflito, 422 regra de negócio. As rotas `/situacao` respondem **200** mesmo quando o id não existe (`existe: false`).
+5. **Contrato**: o OpenAPI completo fica em `/contract/openapi-administrativo.yaml` e o Swagger em `/swagger-ui.html`, ambos sem autenticação.
+
+Exemplo:
+
+```bash
+curl -H "X-Api-Key: dev-integracao-key" http://localhost:8080/administrativo/integracao/medicos/1/situacao
+```
+
 ### Eventos publicados (exchange `adm.events`, tipo topic, routing key = tipo do evento)
 
 Cada cadastro publica, na mesma transação da alteração (`services/EventoService` → outbox → RabbitMQ):
