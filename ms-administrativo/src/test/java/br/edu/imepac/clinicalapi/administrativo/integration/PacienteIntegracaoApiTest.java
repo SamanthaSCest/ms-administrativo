@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@ComGrupo(username = "servico", value = "SERVICO")  // chamada de outro microserviço (X-Api-Key)
+@ComGrupo(username = "service-account-ms-agendamento", value = "SERVICO")  // outro microserviço (client credentials)
 class PacienteIntegracaoApiTest {
 
     @Autowired

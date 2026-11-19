@@ -20,8 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * API de integração para outros microserviços: somente leitura (RN18), acesso com X-Api-Key (perfil SERVICO)
- * ou ADMIN. As rotas do paciente por id ficam no PacienteIntegracaoController.
+ * API de integração para outros microserviços: somente leitura (RN18), permissão INTEGRACAO_CONSULTAR (service
+ * account de outro microserviço, via client credentials, ou ADMINISTRADOR). As rotas do paciente por id ficam no
+ * PacienteIntegracaoController.
  * Contrato: static/contract/openapi-administrativo.yaml (tag Integração).
  */
 @RestController

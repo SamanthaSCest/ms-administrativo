@@ -13,7 +13,7 @@ import java.util.Set;
 
 /**
  * DTO de ENTRADA do funcionário: dados pessoais (PessoaRequest) + profissionais.
- * O cargo define o grupo de acesso padrão do usuário (RBAC): o grupo com o mesmo nome do cargo.
+ * O cargo define o grupo de acesso padrão do usuário no Keycloak: o grupo com o mesmo nome do cargo.
  */
 @Getter
 @Setter
@@ -34,9 +34,10 @@ public class FuncionarioRequest extends ColaboradorRequest {
     private LocalDate dataAdmissao;
 
     /**
-     * Grupos de acesso além do grupo do cargo (opcional). Exige a permissão USUARIO_GERENCIAR.
+     * Grupos de acesso do Keycloak (pelo nome) além do grupo do cargo (opcional). Exige a permissão
+     * USUARIO_GERENCIAR.
      * No cadastro, o usuário fica no grupo do cargo + estes. Na atualização, se informado, substitui os grupos
-     * extras (o do cargo continua); se omitido, os grupos ficam como estão. Permissões avulsas não mudam aqui.
+     * extras (o do cargo continua); se omitido, os grupos ficam como estão.
      */
-    private Set<Long> grupoIds;
+    private Set<String> grupos;
 }

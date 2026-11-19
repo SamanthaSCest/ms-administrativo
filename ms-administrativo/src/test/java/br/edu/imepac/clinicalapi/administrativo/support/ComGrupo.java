@@ -8,16 +8,16 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Executa o teste autenticado com as permissões reais de um grupo de acesso (lidas do banco, como a migration
- * V14 as criou). {@code "SERVICO"} simula outro microserviço (X-Api-Key): ROLE_SERVICO + Permissao.DO_SERVICO.
- * Substitui o {@code @WithMockUser(roles = ...)} desde o RBAC.
+ * Executa o teste autenticado como se o token viesse do Keycloak, com as roles reais de um grupo
+ * (keycloak/realm-clinical.json). {@code "SERVICO"} simula outro microserviço: as roles da service account do
+ * ms-agendamento (client credentials).
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})
 @WithSecurityContext(factory = ComGrupoSecurityContextFactory.class)
 public @interface ComGrupo {
 
-    /** Nome do grupo (ex.: ADMINISTRADOR, RECEPCIONISTA, MEDICO) ou SERVICO. */
+    /** Nome do grupo do realm (ex.: ADMINISTRADOR, RECEPCIONISTA, MEDICO) ou SERVICO. */
     String value();
 
     String username() default "usuario";

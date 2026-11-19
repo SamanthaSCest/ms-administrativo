@@ -1,28 +1,16 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
 import br.edu.imepac.clinicalapi.common.entity.BaseEntity;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.Set;
-
 /**
- * Credenciais de acesso. Médico e Funcionário apontam para um Usuario (Pessoa.usuario);
- * o administrador inicial existe sem pessoa vinculada.
- * Acesso por RBAC: o usuário tem as permissões dos seus grupos mais as permissões avulsas.
+ * Vínculo de um Médico ou Funcionário (Pessoa.usuario) com o seu usuário no Keycloak.
+ * Senha, grupos e permissões ficam no Keycloak; aqui só o id de lá, o login (CPF) e a situação, que é
+ * espelhada no "enabled" do Keycloak (usuário inativo não consegue fazer login).
  */
 @Getter
 @Setter
@@ -30,64 +18,14 @@ import java.util.Set;
 @Table(name = "usuarios")
 public class Usuario extends BaseEntity {
 
-    /** Para pessoas, o login é o CPF. */
+    /** O login é o CPF (username no Keycloak). */
     @Column(nullable = false, unique = true, length = 150)
     private String login;
 
-    /** Hash BCrypt da senha (nunca exposto nos DTOs de saída). */
-    @Column(nullable = false, length = 100)
-    private String senha;
+    /** Id do usuário no Keycloak (UUID). Nulo só em registros anteriores ao Keycloak (migration V15). */
+    @Column(name = "keycloak_id", unique = true, length = 36)
+    private String keycloakId;
 
     @Column(nullable = false)
     private boolean ativo = true;
-
-    @ManyToMany(fetch = FetchType.EAGER)
-    @JoinTable(name = "usuario_grupos",
-            joinColumns = @JoinColumn(name = "usuario_id"),
-            inverseJoinColumns = @JoinColumn(name = "grupo_id"))
-    private Set<Grupo> grupos = new HashSet<>();
-
-    /** Permissões dadas ao usuário fora dos grupos (exceções pontuais). */
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "usuario_permissoes", joinColumns = @JoinColumn(name = "usuario_id"))
-    @Enumerated(EnumType.STRING)
-    @Column(name = "permissao", nullable = false, length = 50)
-    private Set<Permissao> permissoes = new HashSet<>();
-
-    /** Permissões dos grupos + avulsas: é o que vai no token e o que o SecurityConfig checa. */
-    public Set<Permissao> permissoesEfetivas() {
-        Set<Permissao> todas = EnumSet.noneOf(Permissao.class);
-        todas.addAll(permissoes);
-        grupos.forEach(g -> todas.addAll(g.getPermissoes()));
-        return todas;
-    }
-
-    public void adicionarGrupo(Grupo grupo) {
-        grupos.add(grupo);
-    }
-
-    /** Remove pelo id (o Grupo não sobrescreve equals). */
-    public void removerGrupo(Grupo grupo) {
-        grupos.removeIf(g -> g.getId() != null && g.getId().equals(grupo.getId()));
-    }
-
-    public boolean pertenceAo(Grupo grupo) {
-        return grupos.stream().anyMatch(g -> g.getId() != null && g.getId().equals(grupo.getId()));
-    }
-
-    /** Troca grupos e permissões avulsas mantendo as coleções gerenciadas pelo JPA. */
-    public void definirAcessos(Set<Grupo> novosGrupos, Set<Permissao> novasPermissoes) {
-        Set<Permissao> copia = EnumSet.noneOf(Permissao.class);
-        copia.addAll(novasPermissoes);  // cópia: novasPermissoes pode ser a própria coleção
-        definirGrupos(novosGrupos);
-        permissoes.clear();
-        permissoes.addAll(copia);
-    }
-
-    /** Troca só os grupos; as permissões avulsas ficam. */
-    public void definirGrupos(Set<Grupo> novosGrupos) {
-        Set<Grupo> copia = new HashSet<>(novosGrupos);
-        grupos.clear();
-        grupos.addAll(copia);
-    }
 }

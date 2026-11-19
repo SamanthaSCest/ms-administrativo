@@ -1,7 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.config;
 
 import br.edu.imepac.clinicalapi.administrativo.entities.Permissao;
-import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,45 +10,36 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-
 /**
- * Segurança do ms-administrativo (stateless, sem sessão):
+ * Segurança do ms-administrativo (stateless, sem sessão). Quem autentica é o Keycloak (realm "clinical"):
  * <ul>
- *   <li>{@code POST /auth/login} troca login/senha por um JWT (HS256) assinado por este serviço;</li>
- *   <li>as demais rotas exigem {@code Authorization: Bearer <token>}; cada permissão do claim "permissoes"
- *       (RBAC: grupos do usuário + permissões avulsas) vira uma authority;</li>
- *   <li>outros microserviços (ex.: ms-agendamento) se autenticam com o header {@code X-Api-Key} e recebem
- *       as permissões de {@link Permissao#DO_SERVICO}.</li>
+ *   <li>todas as rotas, menos as públicas, exigem {@code Authorization: Bearer <token>} emitido pelo Keycloak;</li>
+ *   <li>o token é validado pela assinatura (chaves públicas do realm), expiração e emissor (iss);</li>
+ *   <li>as client roles de {@code resource_access.ms-administrativo.roles} viram as authorities
+ *       (ver {@link KeycloakRolesConverter}): são os nomes do enum {@link Permissao};</li>
+ *   <li>usuários recebem as roles pelos grupos do Keycloak; outros microserviços (ex.: ms-agendamento) usam
+ *       client credentials e recebem as roles da própria service account.</li>
  * </ul>
  * Contrato: static/contract/openapi-administrativo.yaml (seção "Autenticação").
  */
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(SegurancaProperties.class)
+@EnableConfigurationProperties(KeycloakProperties.class)
 public class SecurityConfig {
 
-    public static final String CLAIM_PERMISSOES = "permissoes";
-    public static final String CLAIM_GRUPOS = "grupos";
-    public static final String CLAIM_USUARIO_ID = "uid";
+    /** Claim com o login (CPF para funcionários e médicos): vira o {@code authentication.getName()}. */
+    public static final String CLAIM_LOGIN = "preferred_username";
+    /** Nomes dos grupos do usuário (mapper "grupos" do client clinical-web). */
+    public static final String CLAIM_GRUPOS = "groups";
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, SegurancaProperties props,
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, KeycloakProperties keycloak,
                                                    SegurancaErrorHandler errorHandler) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)          // API stateless com token: sem cookie de sessão
@@ -58,14 +48,12 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Público
-                        .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers("/error", "/actuator/health/**", "/actuator/info").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/contract/**").permitAll()
-                        // Qualquer usuário autenticado: dados do próprio usuário e troca de senha
+                        // Qualquer usuário autenticado: dados do próprio usuário
                         .requestMatchers("/auth/**").authenticated()
-                        // RBAC: usuários, grupos e permissões
-                        .requestMatchers("/usuarios/**", "/grupos/**", "/permissoes/**")
-                        .hasAuthority(Permissao.USUARIO_GERENCIAR.name())
+                        // Usuários e a lista de grupos do Keycloak
+                        .requestMatchers("/usuarios/**", "/grupos/**").hasAuthority(Permissao.USUARIO_GERENCIAR.name())
                         // Leituras para outros microserviços
                         .requestMatchers("/integracao/**").hasAuthority(Permissao.INTEGRACAO_CONSULTAR.name())
                         // As buscas são POST só para não pôr dado pessoal na URL (RNF08): são leitura
@@ -93,13 +81,10 @@ public class SecurityConfig {
                     auth.anyRequest().authenticated();
                 })
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(keycloak)))
                         .authenticationEntryPoint(errorHandler)
                         .accessDeniedHandler(errorHandler))
-                .exceptionHandling(e -> e.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
-                // Não é @Component de propósito: senão o Spring Boot também o registraria como filtro de servlet
-                .addFilterBefore(new ApiKeyAuthenticationFilter(props.integracao().apiKey()),
-                        BearerTokenAuthenticationFilter.class);
+                .exceptionHandling(e -> e.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler));
         return http.build();
     }
 
@@ -111,40 +96,22 @@ public class SecurityConfig {
         auth.requestMatchers(caminhos).hasAuthority(gerenciar.name());
     }
 
-    /** Cada item do claim "permissoes" (ex.: PACIENTE_GERENCIAR) vira uma authority com o mesmo nome. */
-    private JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
-        authorities.setAuthoritiesClaimName(CLAIM_PERMISSOES);
-        authorities.setAuthorityPrefix("");
+    static JwtAuthenticationConverter jwtAuthenticationConverter(KeycloakProperties keycloak) {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRolesConverter(keycloak.clientId()));
+        converter.setPrincipalClaimName(CLAIM_LOGIN);
         return converter;
     }
 
+    /**
+     * Chaves públicas buscadas no endereço configurado (interno no docker-compose), mas o emissor validado é o
+     * público ({@code keycloak.issuer}): o Keycloak assina todo token com o mesmo iss (KC_HOSTNAME).
+     * O JWKS só é baixado na primeira requisição autenticada (o serviço sobe mesmo com o Keycloak fora do ar).
+     */
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public JwtEncoder jwtEncoder(SegurancaProperties props) {
-        return new NimbusJwtEncoder(new ImmutableSecret<>(chave(props)));
-    }
-
-    @Bean
-    public JwtDecoder jwtDecoder(SegurancaProperties props) {
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(chave(props)).macAlgorithm(MacAlgorithm.HS256).build();
-        // Valida expiração (exp/nbf) e se o token foi emitido por este serviço (iss)
-        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(props.jwt().emissor()));
+    public JwtDecoder jwtDecoder(KeycloakProperties keycloak) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(keycloak.jwkSetUri()).build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(keycloak.issuer()));
         return decoder;
-    }
-
-    private static SecretKey chave(SegurancaProperties props) {
-        String segredo = props.jwt().segredo();
-        // HS256 exige chave de pelo menos 256 bits
-        if (segredo == null || segredo.getBytes(StandardCharsets.UTF_8).length < 32) {
-            throw new IllegalStateException("seguranca.jwt.segredo (JWT_SECRET) deve ter pelo menos 32 bytes");
-        }
-        return new SecretKeySpec(segredo.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
     }
 }

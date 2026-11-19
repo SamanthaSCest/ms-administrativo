@@ -1,3 +1,5 @@
+# Credenciais dos bancos vêm do arquivo .env da raiz (lido automaticamente pelo docker compose; modelo em
+# .env.example). ${VAR:?mensagem} interrompe a subida com essa mensagem se a variável não estiver definida.
 services:
   # um banco por microserviço (cada serviço é dono dos seus dados)
   # Porta 5433 no host para não conflitar com um PostgreSQL instalado localmente (5432)
@@ -6,14 +8,15 @@ services:
     container_name: postgres-administrativo
     environment:
       POSTGRES_DB: clinical_administrativo
-      POSTGRES_USER: clinical
-      POSTGRES_PASSWORD: clinical
+      POSTGRES_USER: ${ADMINISTRATIVO_DB_USER:?defina ADMINISTRATIVO_DB_USER no .env (modelo em .env.example)}
+      POSTGRES_PASSWORD: ${ADMINISTRATIVO_DB_PASSWORD:?defina ADMINISTRATIVO_DB_PASSWORD no .env (modelo em .env.example)}
     ports:
       - "5433:5432"
     volumes:
       - postgres-administrativo-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "clinical", "-d", "clinical_administrativo"]
+      # $$ = variável lida dentro do container (não pelo compose)
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -22,16 +25,17 @@ services:
     image: mysql:8.4
     container_name: mysql-agendamento
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${AGENDAMENTO_DB_ROOT_PASSWORD:?defina AGENDAMENTO_DB_ROOT_PASSWORD no .env (modelo em .env.example)}
       MYSQL_DATABASE: clinical_agendamento
-      MYSQL_USER: clinical
-      MYSQL_PASSWORD: clinical
+      MYSQL_USER: ${AGENDAMENTO_DB_USER:?defina AGENDAMENTO_DB_USER no .env (modelo em .env.example)}
+      MYSQL_PASSWORD: ${AGENDAMENTO_DB_PASSWORD:?defina AGENDAMENTO_DB_PASSWORD no .env (modelo em .env.example)}
     ports:
       - "3308:3306"
     volumes:
       - mysql-agendamento-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      # MYSQL_PWD (e não -p) para a senha não aparecer na lista de processos
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -uroot"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -41,8 +45,8 @@ services:
     image: rabbitmq:3.13-management
     container_name: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: clinical
-      RABBITMQ_DEFAULT_PASS: clinical
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?defina RABBITMQ_USER no .env (modelo em .env.example)}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD no .env (modelo em .env.example)}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -51,6 +55,58 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # Keycloak: login, grupos e permissões (client roles do client ms-administrativo). Realm importado de
+  # keycloak/realm-clinical.json na primeira subida. Console: http://localhost:8180 (KEYCLOAK_ADMIN do .env)
+  postgres-keycloak:
+    image: postgres:17
+    container_name: postgres-keycloak
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:?defina KEYCLOAK_DB_USER no .env (modelo em .env.example)}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?defina KEYCLOAK_DB_PASSWORD no .env (modelo em .env.example)}
+    volumes:
+      - postgres-keycloak-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    container_name: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:?defina KEYCLOAK_DB_USER no .env (modelo em .env.example)}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?defina KEYCLOAK_DB_PASSWORD no .env (modelo em .env.example)}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?defina KEYCLOAK_ADMIN no .env (modelo em .env.example)}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?defina KEYCLOAK_ADMIN_PASSWORD no .env (modelo em .env.example)}
+      # Lidos pelo realm-clinical.json no import (placeholders ${...} do próprio Keycloak)
+      KEYCLOAK_CLINICAL_ADMIN_PASSWORD: ${KEYCLOAK_CLINICAL_ADMIN_PASSWORD:?defina KEYCLOAK_CLINICAL_ADMIN_PASSWORD no .env (modelo em .env.example)}
+      KEYCLOAK_ADMINISTRATIVO_SECRET: ${KEYCLOAK_ADMINISTRATIVO_SECRET:?defina KEYCLOAK_ADMINISTRATIVO_SECRET no .env (modelo em .env.example)}
+      KEYCLOAK_AGENDAMENTO_SECRET: ${KEYCLOAK_AGENDAMENTO_SECRET:?defina KEYCLOAK_AGENDAMENTO_SECRET no .env (modelo em .env.example)}
+      # Todo token sai com iss=http://localhost:8180/realms/clinical, mesmo quando pedido de dentro da rede do
+      # compose (keycloak:8080): assim o mesmo token vale para quem chama de fora e para os serviços.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+    healthcheck:
+      # A imagem não tem curl: HTTP "na mão" na porta de gerenciamento (9000)
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   ms-administrativo:
     build:
@@ -61,22 +117,23 @@ services:
     environment:
       SERVER_PORT: 8081
       DB_URL: jdbc:postgresql://postgres-administrativo:5432/clinical_administrativo
-      DB_USER: clinical
-      DB_PASSWORD: clinical
+      DB_USER: ${ADMINISTRATIVO_DB_USER:?defina ADMINISTRATIVO_DB_USER no .env (modelo em .env.example)}
+      DB_PASSWORD: ${ADMINISTRATIVO_DB_PASSWORD:?defina ADMINISTRATIVO_DB_PASSWORD no .env (modelo em .env.example)}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: clinical
-      RABBITMQ_PASSWORD: clinical
-      # Autenticação (valores de desenvolvimento; sobrescreva com um arquivo .env fora do ambiente local)
-      JWT_SECRET: ${JWT_SECRET:-dev-only-troque-este-segredo-jwt-com-32+-caracteres}
-      ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
-      INTEGRACAO_API_KEY: ${INTEGRACAO_API_KEY:-dev-integracao-key}
+      RABBITMQ_USER: ${RABBITMQ_USER:?defina RABBITMQ_USER no .env (modelo em .env.example)}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?defina RABBITMQ_PASSWORD no .env (modelo em .env.example)}
+      # Keycloak: chaves públicas e Admin API pela rede interna; o issuer é o endereço público (ver KC_HOSTNAME)
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: http://localhost:8180/realms/clinical
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_ADMINISTRATIVO_SECRET:?defina KEYCLOAK_ADMINISTRATIVO_SECRET no .env (modelo em .env.example)}
     ports:
       - "8081:8081"
     depends_on:
       postgres-administrativo:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost:8081/actuator/health"]
@@ -93,10 +150,12 @@ services:
     container_name: ms-agendamento
     environment:
       DB_URL: jdbc:mysql://mysql-agendamento:3306/clinical_agendamento?serverTimezone=UTC
-      DB_USER: clinical
-      DB_PASSWORD: clinical
+      DB_USER: ${AGENDAMENTO_DB_USER:?defina AGENDAMENTO_DB_USER no .env (modelo em .env.example)}
+      DB_PASSWORD: ${AGENDAMENTO_DB_PASSWORD:?defina AGENDAMENTO_DB_PASSWORD no .env (modelo em .env.example)}
       ADMINISTRATIVO_URL: http://ms-administrativo:8081
-      ADMINISTRATIVO_API_KEY: ${INTEGRACAO_API_KEY:-dev-integracao-key}
+      # Token client credentials do client ms-agendamento no Keycloak
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/clinical/protocol/openid-connect/token
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_AGENDAMENTO_SECRET:?defina KEYCLOAK_AGENDAMENTO_SECRET no .env (modelo em .env.example)}
     ports:
       - "8082:8082"
     depends_on:
@@ -120,6 +179,8 @@ services:
     environment:
       ADMINISTRATIVO_URL: http://ms-administrativo:8081
       AGENDAMENTO_URL: http://ms-agendamento:8082
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/clinical/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: http://localhost:8180/realms/clinical
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     depends_on:
@@ -131,3 +192,4 @@ services:
 volumes:
   postgres-administrativo-data:
   mysql-agendamento-data:
+  postgres-keycloak-data:

@@ -15,34 +15,39 @@ info:
     Só a equipe da clínica acessa o sistema: **funcionários** e **médicos**. Pacientes são apenas registros e
     **não têm login**.
 
-    1. Faça `POST /auth/login` com `login` e `senha`. Funcionários e médicos usam o **CPF** como login;
-       o administrador inicial é configurado por `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local: `admin`/`admin12345`).
-    2. Clique em **Authorize** e cole o `accessToken` em `bearerAuth` (sem o prefixo "Bearer").
-    3. As demais rotas exigem o header `Authorization: Bearer <token>`. Sem token ou com token inválido/expirado: **401**;
-       sem a permissão exigida: **403** (ambos no formato `ProblemDetail`).
+    Login, logout e troca de senha são feitos no **Keycloak** (realm `clinical`, local: `http://localhost:8180`).
+    Funcionários e médicos usam o **CPF** como login; o administrador inicial é o usuário `admin` do realm (senha
+    definida em `KEYCLOAK_CLINICAL_ADMIN_PASSWORD` no `.env`).
+
+    1. No Swagger UI, clique em **Authorize** e use `keycloak` (login na tela do Keycloak, client `clinical-web`).
+       Alternativa em desenvolvimento: pegue um token com
+       `curl -d grant_type=password -d client_id=clinical-web -d username=admin -d password=<senha do admin>
+       http://localhost:8180/realms/clinical/protocol/openid-connect/token` e cole o `access_token` em `bearerAuth`.
+    2. As rotas exigem o header `Authorization: Bearer <token do Keycloak>`. Sem token ou com token
+       inválido/expirado: **401**; sem a permissão exigida: **403** (ambos no formato `ProblemDetail`).
 
     ## Controle de acesso (RBAC)
 
-    O acesso é por **permissão**. Cada usuário tem as permissões dos seus **grupos** mais permissões **avulsas**
-    (`GET /permissoes` lista todas). Convenção: `<RECURSO>_CONSULTAR` libera as leituras (GET e as buscas por POST);
-    `<RECURSO>_GERENCIAR` libera cadastrar, alterar, ativar/inativar e remover.
+    O acesso é por **permissão**: cada permissão é uma *client role* do client `ms-administrativo` no Keycloak
+    (claim `resource_access.ms-administrativo.roles`). Convenção: `<RECURSO>_CONSULTAR` libera as leituras (GET e as
+    buscas por POST); `<RECURSO>_GERENCIAR` libera cadastrar, alterar, ativar/inativar e remover.
 
-    - No cadastro, o funcionário entra no **grupo do seu cargo** (mesmo nome do `Cargo`) e o médico no grupo `MEDICO`.
-      Mudar o cargo troca esse grupo; os demais grupos e as permissões avulsas continuam.
-    - O administrador cria grupos (`/grupos`) e define os acessos de cada usuário (`PUT /usuarios/{id}/acessos`).
-      Grupos padrão não podem ser removidos nem renomeados; o grupo `ADMINISTRADOR` não pode ser alterado.
-    - As permissões vão no token (claim `permissoes`): mudanças valem **a partir do próximo login**.
-    - `GET /auth/me` devolve `permissoesEfetivas`, para o front montar menus e telas.
+    - Os usuários recebem as roles pelos **grupos do Keycloak**. Grupos e as roles de cada um são administrados no
+      Keycloak (o realm versionado fica em `keycloak/realm-clinical.json`).
+    - No cadastro, o funcionário ganha um usuário no Keycloak no **grupo do seu cargo** (mesmo nome do `Cargo`) e o
+      médico no grupo `MEDICO`. Mudar o cargo troca esse grupo; os demais continuam.
+    - As roles vão no token: mudanças valem **a partir do próximo token** (no máximo 15 min, ou novo login).
+    - `GET /auth/me` devolve `grupos` e `permissoes` do token, para o front montar menus e telas.
 
-    Outros microserviços se autenticam com o header `X-Api-Key` (`apiKey`) e recebem um conjunto fixo de
-    permissões: leitura dos cadastros, `/integracao` e, para o ms-estoque, escrita em `/insumos`.
+    Outros microserviços usam **client credentials** com o próprio client no Keycloak (ex.: `ms-agendamento`): a
+    service account tem leitura dos cadastros, `/integracao` e escrita em `/insumos`.
 
     Grupos padrão (**G** = consulta e gerencia; **C** = só consulta):
 
-    | Recurso | ADMINISTRADOR | RECEPCIONISTA | ESTOQUISTA | RESPONSAVEL_FINANCEIRO | MEDICO | Serviço (X-Api-Key) |
+    | Recurso | ADMINISTRADOR | RECEPCIONISTA | ESTOQUISTA | RESPONSAVEL_FINANCEIRO | MEDICO | Serviço |
     |---|---|---|---|---|---|---|
-    | `/auth/me`, `/auth/senha` | ✔ | ✔ | ✔ | ✔ | ✔ | — |
-    | Usuários, grupos e permissões | G | — | — | — | — | — |
+    | `/auth/me` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+    | Usuários e grupos | G | — | — | — | — | — |
     | Funcionários | G | — | — | — | — | — |
     | Pacientes, responsáveis e convênios do paciente | G | G | — | C | C | C |
     | Médicos e especialidades | G | C | — | C | C | C |
@@ -62,11 +67,11 @@ servers:
     description: Via API Gateway
 tags:
   - name: Autenticação
-    description: Login (JWT), dados do usuário logado e troca de senha
+    description: Dados do usuário logado (login e senha são do Keycloak)
   - name: Usuários
-    description: Gestão dos usuários de acesso e dos seus acessos (USUARIO_GERENCIAR)
-  - name: Grupos e permissões
-    description: RBAC - grupos de acesso e a lista de permissões (USUARIO_GERENCIAR)
+    description: Usuários de acesso de médicos e funcionários, espelhados no Keycloak (USUARIO_GERENCIAR)
+  - name: Grupos
+    description: Grupos de acesso do Keycloak (USUARIO_GERENCIAR)
   - name: Funcionários
     description: Cadastro da equipe da clínica com dados pessoais e profissionais
   - name: Especialidades
@@ -77,7 +82,7 @@ tags:
   - name: Convênios
   - name: Salas
   - name: Insumos
-    description: Mantidos também pelo ms-estoque (X-Api-Key)
+    description: Mantidos também por outros microserviços (client credentials)
   - name: Procedimentos
     description: Procedimentos (código TUSS) e os insumos que consomem
   - name: Custos dos médicos
@@ -89,39 +94,17 @@ tags:
   - name: Integração
     description: Leituras para outros microserviços (somente leitura, CPF mascarado)
 
-# Por padrão toda operação exige Bearer token; exceções declaram "security" próprio
+# Por padrão toda operação exige token do Keycloak (pelo fluxo OAuth2 ou colado como Bearer)
 security:
+  - keycloak: []
   - bearerAuth: []
 
 paths:
-  /auth/login:
-    post:
-      tags: [Autenticação]
-      summary: Autentica e devolve um token JWT
-      description: Rota pública. A mesma resposta 401 é dada para login inexistente, senha errada ou usuário inativo.
-      operationId: login
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Autenticado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /auth/me:
     get:
       tags: [Autenticação]
       summary: Dados do usuário dono do token
+      description: Lido do próprio token do Keycloak (login, nome, grupos e permissões), sem consultar o banco.
       operationId: usuarioAutenticado
       responses:
         '200':
@@ -129,33 +112,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsuarioResponse'
+                $ref: '#/components/schemas/UsuarioLogadoResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-  /auth/senha:
-    put:
-      tags: [Autenticação]
-      summary: Troca a senha do usuário autenticado
-      operationId: alterarSenha
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlterarSenhaRequest'
-      responses:
-        '204':
-          description: Senha alterada
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '422':
-          description: Senha atual incorreta
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
 
   /usuarios:
     get:
@@ -183,6 +142,7 @@ paths:
     get:
       tags: [Usuários]
       summary: Busca usuário por id
+      description: Inclui `grupos`, os grupos atuais do usuário no Keycloak.
       operationId: buscarUsuario
       responses:
         '200':
@@ -203,7 +163,9 @@ paths:
     patch:
       tags: [Usuários]
       summary: Ativa ou desativa o acesso de um usuário
-      description: Usuário inativo não consegue fazer login. O administrador não pode desativar a si mesmo (422).
+      description: |
+        Desativa também no Keycloak: usuário inativo não consegue fazer login. O administrador não pode desativar
+        a si mesmo (422).
       operationId: alterarStatusUsuario
       requestBody:
         required: true
@@ -228,183 +190,34 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
-  /usuarios/{id}/acessos:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    put:
-      tags: [Usuários]
-      summary: Define os grupos e as permissões avulsas do usuário
-      description: |
-        **Substitui** os grupos e as permissões avulsas atuais (listas vazias tiram tudo). Vale a partir do próximo
-        login do usuário. O administrador não altera os próprios acessos (422); grupo inexistente também é 422.
-      operationId: definirAcessosUsuario
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UsuarioAcessosRequest'
-            example:
-              grupoIds: [2]
-              permissoes: [INSUMO_CONSULTAR]
-      responses:
-        '200':
-          description: Acessos alterados
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UsuarioResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-
-  /permissoes:
+  /grupos:
     get:
-      tags: [Grupos e permissões]
-      summary: Lista as permissões existentes
-      description: As permissões são fixas no código (as regras de acesso as referenciam); só se consultam.
-      operationId: listarPermissoes
+      tags: [Grupos]
+      summary: Lista os nomes dos grupos de acesso do Keycloak
+      description: |
+        Para o front oferecer no campo `grupos` do cadastro de funcionário. Criar grupos e definir as permissões
+        (client roles) de cada um é feito no Keycloak.
+      operationId: listarGrupos
       responses:
         '200':
-          description: Todas as permissões
+          description: Nomes dos grupos, em ordem alfabética
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PermissaoResponse'
+                  type: string
+              example: [ADMINISTRADOR, ESTOQUISTA, MEDICO, RECEPCIONISTA, RESPONSAVEL_FINANCEIRO]
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-
-  /grupos:
-    get:
-      tags: [Grupos e permissões]
-      summary: Lista grupos de acesso (paginado)
-      operationId: listarGrupos
-      parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Size'
-        - $ref: '#/components/parameters/Sort'
-      responses:
-        '200':
-          description: Página de grupos
+        '503':
+          description: Keycloak indisponível
           content:
-            application/json:
+            application/problem+json:
               schema:
-                $ref: '#/components/schemas/GrupoPage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    post:
-      tags: [Grupos e permissões]
-      summary: Cria um grupo de acesso
-      description: Nome único (409). O grupo criado não é padrão (pode ser removido quando não tiver usuários).
-      operationId: criarGrupo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GrupoRequest'
-      responses:
-        '201':
-          description: Criado. Header `Location` aponta para o recurso.
-          headers:
-            Location:
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GrupoResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          $ref: '#/components/responses/Conflict'
-  /grupos/{id}:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    get:
-      tags: [Grupos e permissões]
-      summary: Busca grupo por id
-      operationId: buscarGrupo
-      responses:
-        '200':
-          description: Grupo encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GrupoResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    put:
-      tags: [Grupos e permissões]
-      summary: Altera nome, descrição e permissões do grupo
-      description: |
-        As permissões informadas substituem as atuais e valem a partir do próximo login de cada usuário do grupo.
-        Grupo padrão não pode ser renomeado (422); o grupo `ADMINISTRADOR` não pode ser alterado (422). Nome já usado: 409.
-      operationId: atualizarGrupo
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GrupoRequest'
-      responses:
-        '200':
-          description: Grupo alterado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GrupoResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-    delete:
-      tags: [Grupos e permissões]
-      summary: Remove um grupo
-      description: Grupo padrão não pode ser removido (422); grupo com usuários também não (409).
-      operationId: removerGrupo
-      responses:
-        '204':
-          description: Removido
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+                $ref: '#/components/schemas/ProblemDetail'
 
   /funcionarios:
     get:
@@ -440,10 +253,10 @@ paths:
       tags: [Funcionários]
       summary: Cadastra um funcionário e o seu usuário de acesso
       description: |
-        Cria o funcionário com dados pessoais e profissionais e o usuário de acesso (login = CPF)
-        no grupo de acesso padrão do cargo (RBAC: grupo com o mesmo nome do `Cargo`).
-        `senha` é obrigatória. `grupoIds` (opcional) acrescenta outros grupos e exige também a permissão
-        `USUARIO_GERENCIAR` (sem ela: 403 `ADM-FUN-001`); grupo inexistente: 422.
+        Cria o funcionário com dados pessoais e profissionais e o usuário de acesso **no Keycloak** (login = CPF)
+        no grupo com o mesmo nome do `Cargo`. `senha` é obrigatória e vai só para o Keycloak. `grupos` (opcional)
+        acrescenta outros grupos do Keycloak e exige também a permissão `USUARIO_GERENCIAR` (sem ela: 403
+        `ADM-FUN-001`); grupo inexistente: 422. Login já usado: 409. Keycloak fora do ar: 503.
       operationId: criarFuncionario
       requestBody:
         required: true
@@ -532,10 +345,10 @@ paths:
       tags: [Funcionários]
       summary: Atualiza um funcionário
       description: |
-        Se `senha` for informada, a senha do usuário é trocada; o login acompanha o CPF.
-        Mudar o `cargo` troca o grupo do cargo e mantém os demais. Com `grupoIds` (exige `USUARIO_GERENCIAR`, senão
-        403 `ADM-FUN-001`), o usuário fica com o grupo do cargo + esses grupos, no lugar dos atuais (`[]` deixa só o do
-        cargo). As permissões avulsas não mudam aqui.
+        Se `senha` for informada, a senha do usuário é trocada no Keycloak; login (CPF), nome e e-mail também são
+        atualizados lá. Mudar o `cargo` troca o grupo do cargo e mantém os demais. Com `grupos` (exige
+        `USUARIO_GERENCIAR`, senão 403 `ADM-FUN-001`), o usuário fica com o grupo do cargo + esses grupos, no lugar
+        dos atuais (`[]` deixa só o do cargo).
       operationId: atualizarFuncionario
       requestBody:
         required: true
@@ -765,11 +578,11 @@ paths:
     get:
       tags: [Médicos]
       summary: Busca médico por id
-      description: Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do médico.
+      description: Também usado pelo ms-agendamento (token client credentials do Keycloak) para validar a existência do médico.
       operationId: buscarMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Médico encontrado
@@ -877,8 +690,8 @@ paths:
         A paginação continua na query (`?page=&size=&sort=`). CPF sempre mascarado na resposta (RN20).
       operationId: buscarPacientes
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -910,11 +723,11 @@ paths:
       summary: Busca paciente por id
       description: |
         Detalhe completo: dados pessoais, contato e os convênios vinculados com o número da carteirinha (`convenios`).
-        Também usado pelo ms-agendamento (via `X-Api-Key`) para validar a existência do paciente.
+        Também usado pelo ms-agendamento (token client credentials do Keycloak) para validar a existência do paciente.
       operationId: buscarPaciente
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Paciente encontrado
@@ -966,7 +779,7 @@ paths:
       description: CPF sempre mascarado (LGPD).
       operationId: integracaoBuscarPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -987,7 +800,7 @@ paths:
       description: Responde 200 mesmo quando o id não existe (existe = false), para o chamador não tratar como erro. `ativo` = false quando o paciente foi inativado.
       operationId: integracaoSituacaoPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1005,7 +818,7 @@ paths:
       summary: Contato do paciente (para notificações)
       operationId: integracaoContatoPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1027,7 +840,7 @@ paths:
         o vínculo, mas ele some desta lista. Sem `data`, usa hoje. Paciente inexistente: 404.
       operationId: integracaoConveniosVigentesPaciente
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: data
@@ -1056,7 +869,7 @@ paths:
       description: Ids inexistentes são ignorados. CPF sempre mascarado.
       operationId: integracaoPacientesLote
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/Ids'
@@ -1079,7 +892,7 @@ paths:
       summary: Especialidades ativas
       operationId: integracaoEspecialidades
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1099,7 +912,7 @@ paths:
         que atendem a especialidade. Com os dois, devolve a interseção. Sem nenhum dos dois: 422.
       operationId: integracaoMedicos
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: ids
@@ -1136,7 +949,7 @@ paths:
       summary: Resumo do médico
       operationId: integracaoMedico
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1156,7 +969,7 @@ paths:
       description: Responde 200 mesmo quando o id não existe (existe = false).
       operationId: integracaoSituacaoMedico
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1174,7 +987,7 @@ paths:
       description: false se o médico não existir, estiver inativo ou não atender a especialidade (ativa).
       operationId: integracaoMedicoAtende
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: especialidadeId
@@ -1196,7 +1009,7 @@ paths:
       summary: Salas ativas, opcionalmente de um tipo
       operationId: integracaoSalas
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       parameters:
         - name: tipo
@@ -1220,7 +1033,7 @@ paths:
       summary: Resumo da sala
       operationId: integracaoSala
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1238,7 +1051,7 @@ paths:
       description: Planos ficam com outro grupo e não fazem parte desta API.
       operationId: integracaoConvenios
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1257,7 +1070,7 @@ paths:
       summary: Resumo do convênio
       operationId: integracaoConvenio
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       responses:
         '200':
@@ -1673,8 +1486,8 @@ paths:
       summary: Lista insumos (paginado)
       operationId: listarInsumos
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Size'
@@ -1691,8 +1504,8 @@ paths:
       summary: Cadastra um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: criarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -1720,8 +1533,8 @@ paths:
       summary: Busca insumo por id
       operationId: buscarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrado
@@ -1736,8 +1549,8 @@ paths:
       summary: Atualiza um insumo (INSUMO_GERENCIAR; também o ms-estoque)
       operationId: atualizarInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -1763,8 +1576,8 @@ paths:
       description: Retorna 409 se o insumo for usado em algum procedimento.
       operationId: removerInsumo
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '204':
           description: Removido
@@ -1780,7 +1593,7 @@ paths:
       summary: 'Atualiza só o custo unitário (ex.: ms-estoque após uma compra)'
       operationId: atualizarCustoInsumo
       security:
-        - apiKey: []
+        - keycloak: []
         - bearerAuth: []
       requestBody:
         required: true
@@ -1902,8 +1715,8 @@ paths:
       summary: Lista custos (paginado), opcionalmente de um médico
       operationId: listarCustosMedicos
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -1957,8 +1770,8 @@ paths:
       description: Informe `especialidadeId` (consulta) **ou** `procedimentoId`.
       operationId: buscarCustoVigente
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -2001,8 +1814,8 @@ paths:
       summary: Busca custo por id
       operationId: buscarCustoMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrado
@@ -2053,8 +1866,8 @@ paths:
       summary: Lista disponibilidades (paginado), opcionalmente de um médico
       operationId: listarDisponibilidades
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -2107,8 +1920,8 @@ paths:
       description: Semanais do dia, menos os que cruzam um bloqueio (EXCECAO com disponivel=false), mais os horários extras.
       operationId: agendaDoMedico
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       parameters:
         - name: medicoId
           in: query
@@ -2141,8 +1954,8 @@ paths:
       summary: Busca disponibilidade por id
       operationId: buscarDisponibilidade
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       responses:
         '200':
           description: Encontrada
@@ -2209,8 +2022,8 @@ paths:
         Usuários têm o endpoint próprio `PATCH /usuarios/{id}/status`.
       operationId: alterarStatusCadastro
       security:
+        - keycloak: []
         - bearerAuth: []
-        - apiKey: []
       requestBody:
         required: true
         content:
@@ -2237,16 +2050,23 @@ paths:
 
 components:
   securitySchemes:
+    keycloak:
+      type: oauth2
+      description: |
+        Login no Keycloak (realm `clinical`) com o client público `clinical-web` (authorization code + PKCE).
+        Endereço local; em outro ambiente, troque pelo endereço público do Keycloak.
+      flows:
+        authorizationCode:
+          authorizationUrl: http://localhost:8180/realms/clinical/protocol/openid-connect/auth
+          tokenUrl: http://localhost:8180/realms/clinical/protocol/openid-connect/token
+          scopes: {}
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Token obtido em `POST /auth/login` (válido por 2 h por padrão).
-    apiKey:
-      type: apiKey
-      in: header
-      name: X-Api-Key
-      description: Chave de integração entre microserviços (`INTEGRACAO_API_KEY`). Acesso somente leitura.
+      description: |
+        Access token do Keycloak (realm `clinical`), colado à mão. Usuários: client `clinical-web`; outros
+        microserviços: client credentials com o próprio client (ex.: `ms-agendamento`).
 
   parameters:
     Ids:
@@ -2430,7 +2250,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2519,7 +2339,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2683,7 +2503,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -2940,95 +2760,13 @@ components:
     Permissao:
       type: string
       description: |
-        Permissão do RBAC (vira uma authority com o mesmo nome). `*_CONSULTAR`: leituras; `*_GERENCIAR`: escrita.
+        Permissão do RBAC: client role do client `ms-administrativo` no Keycloak (vira uma authority com o mesmo
+        nome). `*_CONSULTAR`: leituras; `*_GERENCIAR`: escrita.
       enum: [USUARIO_GERENCIAR, FUNCIONARIO_CONSULTAR, FUNCIONARIO_GERENCIAR, MEDICO_CONSULTAR, MEDICO_GERENCIAR,
              ESPECIALIDADE_CONSULTAR, ESPECIALIDADE_GERENCIAR, PACIENTE_CONSULTAR, PACIENTE_GERENCIAR,
              CONVENIO_CONSULTAR, CONVENIO_GERENCIAR, SALA_CONSULTAR, SALA_GERENCIAR, PROCEDIMENTO_CONSULTAR,
              PROCEDIMENTO_GERENCIAR, INSUMO_CONSULTAR, INSUMO_GERENCIAR, CUSTO_MEDICO_CONSULTAR,
              CUSTO_MEDICO_GERENCIAR, DISPONIBILIDADE_CONSULTAR, DISPONIBILIDADE_GERENCIAR, INTEGRACAO_CONSULTAR]
-    PermissaoResponse:
-      type: object
-      properties:
-        codigo:
-          $ref: '#/components/schemas/Permissao'
-        descricao:
-          type: string
-          example: Consultar pacientes, responsáveis e convênios do paciente
-    GrupoResumo:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        nome:
-          type: string
-          example: RECEPCIONISTA
-    GrupoRequest:
-      type: object
-      required: [nome, permissoes]
-      properties:
-        nome:
-          type: string
-          maxLength: 50
-          example: AGENDAMENTO
-        descricao:
-          type: string
-          maxLength: 255
-        permissoes:
-          type: array
-          uniqueItems: true
-          description: Substituem as permissões atuais do grupo
-          items:
-            $ref: '#/components/schemas/Permissao'
-          example: [PACIENTE_CONSULTAR, DISPONIBILIDADE_CONSULTAR]
-    GrupoResponse:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        nome:
-          type: string
-        descricao:
-          type: string
-        padrao:
-          type: boolean
-          description: Grupo de cargo ou MEDICO (criado pela migration); não pode ser removido nem renomeado
-        permissoes:
-          type: array
-          items:
-            $ref: '#/components/schemas/Permissao'
-        dataCriacao:
-          type: string
-          format: date-time
-        dataModificacao:
-          type: string
-          format: date-time
-    GrupoPage:
-      type: object
-      properties:
-        content:
-          type: array
-          items:
-            $ref: '#/components/schemas/GrupoResponse'
-        page:
-          $ref: '#/components/schemas/PageMetadata'
-    UsuarioAcessosRequest:
-      type: object
-      description: Substitui os grupos e as permissões avulsas do usuário; listas vazias ou omitidas tiram tudo.
-      properties:
-        grupoIds:
-          type: array
-          uniqueItems: true
-          items:
-            type: integer
-            format: int64
-        permissoes:
-          type: array
-          uniqueItems: true
-          description: Permissões dadas fora dos grupos
-          items:
-            $ref: '#/components/schemas/Permissao'
     SenhaPessoa:
       type: string
       format: password
@@ -3037,51 +2775,36 @@ components:
       writeOnly: true
       description: |
         Senha do usuário de acesso (login = CPF). **Obrigatória no cadastro (POST)**; na atualização (PUT),
-        se informada, troca a senha. Armazenada apenas como hash BCrypt.
+        se informada, troca a senha. Vai só para o Keycloak (não é guardada aqui). Política do realm: 8 a 72
+        caracteres e diferente do login (CPF); senha recusada pelo Keycloak: 422.
       example: senhaForte1
-    LoginRequest:
+    UsuarioLogadoResponse:
       type: object
-      required: [login, senha]
+      description: Dono do token, lido do próprio token do Keycloak
       properties:
         login:
           type: string
-          description: CPF (médico ou funcionário) ou login do administrador inicial
-          example: admin
-        senha:
+          description: CPF (funcionário/médico) ou o username no Keycloak (ex. admin)
+          example: '11122233396'
+        nome:
           type: string
-          format: password
-          example: admin12345
-    TokenResponse:
-      type: object
-      properties:
-        accessToken:
+          example: Ana Lima
+        email:
           type: string
-          description: JWT (HS256) com os claims sub (login), uid, grupos, permissoes (efetivas), iss, iat e exp
-        tokenType:
-          type: string
-          example: Bearer
-        expiresIn:
-          type: integer
-          format: int64
-          description: Validade do token em segundos
-          example: 7200
-        usuario:
-          $ref: '#/components/schemas/UsuarioResponse'
-    AlterarSenhaRequest:
-      type: object
-      required: [senhaAtual, novaSenha]
-      properties:
-        senhaAtual:
-          type: string
-          format: password
-        novaSenha:
-          type: string
-          format: password
-          minLength: 8
-          maxLength: 72
+        grupos:
+          type: array
+          description: Grupos do Keycloak (claim `groups`)
+          items:
+            type: string
+          example: [RECEPCIONISTA]
+        permissoes:
+          type: array
+          description: Client roles do ms-administrativo (somadas de todos os grupos)
+          items:
+            $ref: '#/components/schemas/Permissao'
     UsuarioResponse:
       type: object
-      description: Usuário de acesso (a senha nunca é devolvida)
+      description: Usuário de acesso. A senha fica só no Keycloak.
       properties:
         id:
           type: integer
@@ -3089,22 +2812,21 @@ components:
         login:
           type: string
           example: '12345678901'
+        keycloakId:
+          type: string
+          description: Id do usuário no Keycloak (vazio em registros anteriores ao Keycloak)
+          example: 6f1c9a2e-3b4d-4e5f-8a9b-0c1d2e3f4a5b
         ativo:
           type: boolean
+          description: Espelhado no Keycloak (inativo não faz login)
         grupos:
           type: array
+          description: |
+            Grupos atuais no Keycloak. Só no detalhe (`GET /usuarios/{id}`, médico/funcionário por id e respostas
+            de cadastro/atualização); nas listagens é omitido.
           items:
-            $ref: '#/components/schemas/GrupoResumo'
-        permissoes:
-          type: array
-          description: Permissões avulsas (fora dos grupos)
-          items:
-            $ref: '#/components/schemas/Permissao'
-        permissoesEfetivas:
-          type: array
-          description: Grupos + avulsas. É o que vale no token (a partir do próximo login, se mudou)
-          items:
-            $ref: '#/components/schemas/Permissao'
+            type: string
+          example: [RECEPCIONISTA]
         dataCriacao:
           type: string
           format: date-time
@@ -3169,16 +2891,15 @@ components:
           example: F-001
         cargo:
           $ref: '#/components/schemas/Cargo'
-        grupoIds:
+        grupos:
           type: array
           uniqueItems: true
           description: |
-            Grupos de acesso além do grupo do cargo (opcional; exige `USUARIO_GERENCIAR`). No PUT, substitui os grupos
-            extras; omitido, os grupos ficam como estão.
+            Grupos do Keycloak (pelo nome) além do grupo do cargo (opcional; exige `USUARIO_GERENCIAR`). No PUT,
+            substitui os grupos extras; omitido, os grupos ficam como estão. Ver `GET /grupos`.
           items:
-            type: integer
-            format: int64
-          example: [6]
+            type: string
+          example: [MEDICO]
         setor:
           type: string
           maxLength: 100
@@ -3205,7 +2926,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3346,7 +3067,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3416,7 +3137,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3481,7 +3202,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3557,7 +3278,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3645,7 +3366,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3738,7 +3459,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração
@@ -3832,7 +3553,7 @@ components:
           description: false = inativado (PATCH /{recurso}/{id}/status)
         criadoPor:
           type: string
-          description: Login de quem criou ("servico" para X-Api-Key, "sistema" sem usuário)
+          description: Login de quem criou (para outro microserviço, o usuário da service account, ex. `service-account-ms-agendamento`; "sistema" sem usuário)
         atualizadoPor:
           type: string
           description: Login de quem fez a última alteração

@@ -8,6 +8,10 @@ public interface PossuiUsuario {
 
     String getCpf();
 
+    String getNome();
+
+    String getEmail();
+
     Usuario getUsuario();
 
     void setUsuario(Usuario usuario);

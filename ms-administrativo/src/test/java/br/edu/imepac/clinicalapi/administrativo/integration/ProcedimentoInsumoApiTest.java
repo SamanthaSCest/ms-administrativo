@@ -1,5 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.integration;
 
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
 import br.edu.imepac.clinicalapi.administrativo.repositories.EspecialidadeRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.InsumoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.MedicoRepository;
@@ -16,6 +17,7 @@ import org.springframework.security.test.context.support.WithAnonymousUser;
 import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -27,14 +29,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Insumos (inclusive pelo ms-estoque via X-Api-Key) e procedimentos com insumos e custo. */
+/** Insumos (inclusive por outro microserviço, com token client credentials) e procedimentos com insumos e custo. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class ProcedimentoInsumoApiTest {
 
-    private static final String API_KEY = "dev-integracao-key";
+    private static final RequestPostProcessor SERVICO =
+            Acessos.grupo("service-account-ms-agendamento", Acessos.SERVICO);
 
     @Autowired
     private MockMvc mockMvc;
@@ -144,19 +147,19 @@ class ProcedimentoInsumoApiTest {
 
     @Test
     @WithAnonymousUser
-    void estoque_comApiKey_cadastraEAtualizaCustoDoInsumo() throws Exception {
-        long id = id(mockMvc.perform(post("/insumos").header("X-Api-Key", API_KEY)
+    void servico_comToken_cadastraEAtualizaCustoDoInsumo() throws Exception {
+        long id = id(mockMvc.perform(post("/insumos").with(SERVICO)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"codigo\":\"SERINGA\",\"nome\":\"Seringa 5ml\",\"unidadeMedida\":\"UN\",\"custoUnitario\":0.80}"))
                 .andExpect(status().isCreated()).andReturn());
 
-        mockMvc.perform(patch("/insumos/{id}/custo", id).header("X-Api-Key", API_KEY)
+        mockMvc.perform(patch("/insumos/{id}/custo", id).with(SERVICO)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"custoUnitario\":0.95}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.custoUnitario").value(0.95));
 
-        mockMvc.perform(get("/insumos/{id}", id).header("X-Api-Key", API_KEY)).andExpect(status().isOk());
-        // Sem a chave: 401
+        mockMvc.perform(get("/insumos/{id}", id).with(SERVICO)).andExpect(status().isOk());
+        // Sem token: 401
         mockMvc.perform(get("/insumos/{id}", id)).andExpect(status().isUnauthorized());
     }
 

@@ -1,19 +1,16 @@
 package br.edu.imepac.clinicalapi.administrativo.entities;
 
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.Set;
-
 /**
- * Permissões do RBAC. Cada uma vira uma authority com o próprio nome (ex.: PACIENTE_GERENCIAR) e é checada
- * no SecurityConfig. A lista é fixa no código porque as regras de acesso a referenciam; o que o administrador
- * configura é quais permissões cada grupo (e cada usuário, de forma avulsa) tem.
+ * Permissões do RBAC. Cada uma é uma client role do client "ms-administrativo" no Keycloak, com o mesmo nome
+ * (ex.: PACIENTE_GERENCIAR), e é checada no SecurityConfig. A lista é fixa no código porque as regras de acesso
+ * a referenciam; quem recebe cada permissão é configurado no Keycloak (roles dos grupos e das service accounts,
+ * ver keycloak/realm-clinical.json). Uma role nova precisa existir nos dois lugares.
  * Convenção: *_CONSULTAR libera as leituras (GET e as buscas por POST); *_GERENCIAR libera cadastrar, alterar,
  * ativar/inativar e remover.
  */
 public enum Permissao {
 
-    USUARIO_GERENCIAR("Gerenciar usuários, grupos e permissões de acesso"),
+    USUARIO_GERENCIAR("Gerenciar usuários e seus acessos"),
     FUNCIONARIO_CONSULTAR("Consultar funcionários"),
     FUNCIONARIO_GERENCIAR("Cadastrar, alterar e desativar funcionários"),
     MEDICO_CONSULTAR("Consultar médicos"),
@@ -35,15 +32,6 @@ public enum Permissao {
     DISPONIBILIDADE_CONSULTAR("Consultar disponibilidades dos médicos"),
     DISPONIBILIDADE_GERENCIAR("Cadastrar e alterar disponibilidades dos médicos"),
     INTEGRACAO_CONSULTAR("Consultar os endpoints de integração (/integracao)");
-
-    /**
-     * Permissões de outro microserviço autenticado por X-Api-Key (ex.: ms-agendamento, ms-estoque).
-     * Não é um grupo: o serviço não tem usuário.
-     */
-    public static final Set<Permissao> DO_SERVICO = Collections.unmodifiableSet(EnumSet.of(
-            PACIENTE_CONSULTAR, MEDICO_CONSULTAR, ESPECIALIDADE_CONSULTAR, CONVENIO_CONSULTAR, SALA_CONSULTAR,
-            PROCEDIMENTO_CONSULTAR, INSUMO_CONSULTAR, INSUMO_GERENCIAR, CUSTO_MEDICO_CONSULTAR,
-            DISPONIBILIDADE_CONSULTAR, INTEGRACAO_CONSULTAR));
 
     private final String descricao;
 
