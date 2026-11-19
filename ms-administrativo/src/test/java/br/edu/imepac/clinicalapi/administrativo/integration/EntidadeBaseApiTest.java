@@ -14,7 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -25,7 +26,6 @@ import java.time.temporal.TemporalAdjusters;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.matchesPattern;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -36,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class EntidadeBaseApiTest {
 
     private static final String UUID_REGEX = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
@@ -136,6 +136,34 @@ class EntidadeBaseApiTest {
     }
 
     @Test
+    void rn11_inativarEspecialidadeComMedicoAtivo_retorna422ComQuantidade() throws Exception {
+        long medico1 = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        id(criar("/medicos", medicoJson("22245678982", "1002", cardio)));
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.codigo").value("ADM-ESP-002"))
+                .andExpect(jsonPath("$.medicosVinculados").value(2));
+        mockMvc.perform(get("/especialidades/{id}", cardio)).andExpect(jsonPath("$.ativo").value(true));
+
+        // Médico inativo não conta
+        alterarStatus("medicos", medico1, false).andExpect(status().isOk());
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.medicosVinculados").value(1));
+    }
+
+    @Test
+    void rn11_especialidadeSoComMedicosInativos_podeSerInativada() throws Exception {
+        long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
+        alterarStatus("medicos", medico, false).andExpect(status().isOk());
+
+        alterarStatus("especialidades", cardio, false)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativo").value(false));
+    }
+
+    @Test
     void medicoInativo_naoFazLogin_naoRecebeCusto_eAgendaFicaVazia() throws Exception {
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
         criar("/disponibilidades", """
@@ -183,7 +211,7 @@ class EntidadeBaseApiTest {
     void permissoes_seguemAsRegrasDeEscritaDeCadaRecurso() throws Exception {
         long paciente = id(criar("/pacientes", "{\"nome\":\"Ana\",\"cpf\":\"12345678909\",\"dataNascimento\":\"1990-01-01\"}"));
         long medico = id(criar("/medicos", medicoJson("11145678920", "1001", cardio)));
-        var recepcao = user("recepcao").roles("FUNCIONARIO");
+        var recepcao = Acessos.grupo("recepcao", "RECEPCIONISTA");
 
         // Funcionário gerencia pacientes, mas não médicos
         mockMvc.perform(patch("/pacientes/{id}/status", paciente).with(recepcao)
@@ -202,7 +230,7 @@ class EntidadeBaseApiTest {
                  "cargo":"ADMINISTRADOR","dataAdmissao":"2024-01-01","senha":"senhaForte1"}
                 """));
 
-        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(user("11122233396").roles("ADMIN"))
+        mockMvc.perform(patch("/funcionarios/{id}/status", funcionario).with(Acessos.grupo("11122233396", "ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"ativo\":false}"))
                 .andExpect(status().isUnprocessableEntity());
 

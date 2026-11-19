@@ -2,6 +2,7 @@ package br.edu.imepac.clinicalapi.administrativo.services;
 
 import br.edu.imepac.clinicalapi.administrativo.config.SecurityConfig;
 import br.edu.imepac.clinicalapi.administrativo.config.SegurancaProperties;
+import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Usuario;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -14,7 +15,9 @@ import java.time.Duration;
 import java.time.Instant;
 
 /**
- * Emite o JWT de acesso. Claims: iss (este serviço), sub (login), uid (id do usuário), perfil, iat e exp.
+ * Emite o JWT de acesso. Claims: iss (este serviço), sub (login), uid (id do usuário), grupos (nomes, informativo),
+ * permissoes (efetivas: grupos + avulsas; viram as authorities), iat e exp.
+ * Mudanças de grupo/permissão valem a partir do próximo login (o token já emitido carrega as anteriores).
  */
 @Service
 public class TokenService {
@@ -35,7 +38,8 @@ public class TokenService {
                 .issuedAt(agora)
                 .expiresAt(agora.plus(validade()))
                 .claim(SecurityConfig.CLAIM_USUARIO_ID, usuario.getId())
-                .claim(SecurityConfig.CLAIM_PERFIL, usuario.getPerfil().name())
+                .claim(SecurityConfig.CLAIM_GRUPOS, usuario.getGrupos().stream().map(Grupo::getNome).sorted().toList())
+                .claim(SecurityConfig.CLAIM_PERMISSOES, usuario.permissoesEfetivas().stream().map(Enum::name).toList())
                 .build();
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

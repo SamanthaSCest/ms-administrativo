@@ -33,6 +33,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
         pd.setTitle(status.getReasonPhrase());
         pd.setProperty("codigo", codigo);
+        if (ex instanceof NegocioException n) {
+            n.getDetalhes().forEach(pd::setProperty);
+        }
         return ResponseEntity.status(status).body(pd);
     }
 

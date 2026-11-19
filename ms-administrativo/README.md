@@ -70,18 +70,22 @@ Nos testes o publicador fica desligado (`outbox.publicador.habilitado: false`).
 
 ```text
 Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, dataNascimento)
-  id, login (único)             ├── Medico      (medicos)       + crm/ufCrm, especialidades,   -> perfil MEDICO
-  senha (hash BCrypt)           ├── Funcionario (funcionarios)  + matricula, cargo, setor,     -> perfil pelo cargo
-  perfil, ativo                 │                                 dataAdmissao, usuario
-        ^                       └── Paciente    (pacientes)     sem usuário: não acessa o sistema
+  id, login (único)             ├── Medico      (medicos)       + crm/ufCrm, especialidades,   -> grupo MEDICO
+  senha (hash BCrypt), ativo    ├── Funcionario (funcionarios)  + matricula, cargo, setor,     -> grupo do cargo
+  grupos (usuario_grupos)       │                                 dataAdmissao, usuario
+  permissoes avulsas            └── Paciente    (pacientes)     sem usuário: não acessa o sistema
+  (usuario_permissoes)
+        ^
         └──── 1:1 (usuario_id, único) em medicos e funcionarios
+
+Grupo (grupos) ── permissoes (grupo_permissoes)      Permissao: enum fixo no código
 ```
 
 - Só a **equipe** acessa o sistema. Médicos e funcionários implementam `PossuiUsuario` e têm **um** usuário (`@OneToOne`, cascata). O login é o **CPF**; a senha vai no próprio cadastro (`senha`, obrigatória no POST).
 - **Paciente não tem login**: é apenas um registro, e o cadastro não pede senha.
 - Remover o médico ou o funcionário remove o usuário. Mudar o CPF muda o login.
 - Um mesmo CPF só pode ter um usuário: cadastrar um médico com o CPF de um funcionário retorna 409. Um funcionário pode ter o mesmo CPF de um paciente.
-- O **administrador inicial** (sem pessoa vinculada) é criado na inicialização por `config/AdminInicializador`, a partir de `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local `admin`/`admin12345`). Outros admins são funcionários com `"cargo": "ADMINISTRADOR"` (o cargo define o perfil: ADMINISTRADOR → `ADMIN`; demais → `FUNCIONARIO`).
+- O **administrador inicial** (sem pessoa vinculada) é criado na inicialização por `config/AdminInicializador`, a partir de `ADMIN_LOGIN`/`ADMIN_PASSWORD` (padrão local `admin`/`admin12345`). Ele entra no grupo `ADMINISTRADOR`. Outros admins são funcionários com `"cargo": "ADMINISTRADOR"`.
 - Migration: `db/migration/V3__criar_usuarios_e_funcionarios.sql` (médicos antigos ficam com `usuario_id` nulo até receberem senha num PUT).
 
 ### Endpoints
@@ -91,17 +95,31 @@ Usuario (usuarios)            Pessoa (abstrata: nome, cpf, email, telefone, data
 | `POST /auth/login` | público | `{login, senha}` → `{accessToken, tokenType, expiresIn, usuario}` |
 | `GET /auth/me` | autenticado | Dados do usuário do token |
 | `PUT /auth/senha` | autenticado | `{senhaAtual, novaSenha}` |
-| `GET /usuarios`, `GET /usuarios/{id}` | ADMIN | Consulta usuários |
-| `PATCH /usuarios/{id}/status` | ADMIN | `{ativo}`: bloqueia/libera o login (não pode desativar a si mesmo) |
-| `/funcionarios` (CRUD) | ADMIN | Cadastro de funcionários + usuário |
+| `GET /usuarios`, `GET /usuarios/{id}` | `USUARIO_GERENCIAR` | Consulta usuários (com grupos e permissões efetivas) |
+| `PATCH /usuarios/{id}/status` | `USUARIO_GERENCIAR` | `{ativo}`: bloqueia/libera o login (não pode desativar a si mesmo) |
+| `PUT /usuarios/{id}/acessos` | `USUARIO_GERENCIAR` | `{grupoIds, permissoes}`: substitui grupos e permissões avulsas (não pode alterar os próprios) |
+| `GET /permissoes` | `USUARIO_GERENCIAR` | Lista as permissões existentes |
+| `/grupos` (CRUD) | `USUARIO_GERENCIAR` | Grupos de acesso e suas permissões |
+| `/funcionarios` (CRUD) | `FUNCIONARIO_CONSULTAR` / `_GERENCIAR` | Cadastro de funcionários + usuário. `grupoIds` (opcional) escolhe grupos além do do cargo e exige também `USUARIO_GERENCIAR` (403 `ADM-FUN-001`) |
 
-A matriz completa de permissões está na descrição do contrato (`static/contract/openapi-administrativo.yaml`) e em `config/SecurityConfig`.
+### Controle de acesso (RBAC)
+
+- O acesso é por **permissão** (`entities/Permissao`): `<RECURSO>_CONSULTAR` libera as leituras (GET e as buscas por POST) e `<RECURSO>_GERENCIAR` libera a escrita. O usuário tem as permissões dos seus **grupos** mais as **avulsas**.
+- Grupos padrão (migration V14), um por cargo e um para médicos. Quem é cadastrado entra no grupo do cargo, e mudar o cargo troca esse grupo sem mexer nos demais acessos:
+  - `ADMINISTRADOR`: todas as permissões.
+  - `RECEPCIONISTA` (atendimento e agendamento): gerencia pacientes; consulta médicos, especialidades, convênios, salas, procedimentos, custos e disponibilidades.
+  - `ESTOQUISTA`: gerencia insumos; consulta procedimentos e salas.
+  - `RESPONSAVEL_FINANCEIRO`: gerencia custos dos médicos; consulta convênios, procedimentos, insumos, médicos, especialidades e pacientes.
+  - `MEDICO`: consulta pacientes, médicos, especialidades, convênios, salas, procedimentos, insumos e disponibilidades.
+- Grupo padrão não pode ser removido nem renomeado; o `ADMINISTRADOR` não pode ser alterado (evita perder o acesso de gerenciar usuários). Grupo com usuários não pode ser removido.
+- Na migração, os usuários existentes foram para o grupo equivalente: `ADMIN` → `ADMINISTRADOR`, `MEDICO` → `MEDICO` e `FUNCIONARIO` → grupo do cargo.
+- A matriz completa está na descrição do contrato (`static/contract/openapi-administrativo.yaml`) e as regras por rota em `config/SecurityConfig`.
 
 ### Como funciona
 
-- JWT **HS256** emitido pelo próprio serviço (`services/TokenService`) e validado pelo Spring Security Resource Server (`config/SecurityConfig`). O claim `perfil` vira `ROLE_<perfil>`.
+- JWT **HS256** emitido pelo próprio serviço (`services/TokenService`) e validado pelo Spring Security Resource Server (`config/SecurityConfig`). Cada item do claim `permissoes` vira uma authority. Como as permissões vão no token, **mudanças de acesso valem a partir do próximo login**.
 - Erros de segurança (401/403) saem no mesmo formato `ErrorResponse` (`config/SegurancaErrorHandler`).
-- Serviço-a-serviço: o ms-agendamento e o ms-estoque enviam `X-Api-Key` (`config/ApiKeyAuthenticationFilter`) e recebem o perfil `SERVICO` (leitura; escrita só em `/insumos`, para o estoque).
+- Serviço-a-serviço: o ms-agendamento e o ms-estoque enviam `X-Api-Key` (`config/ApiKeyAuthenticationFilter`) e recebem as permissões de `Permissao.DO_SERVICO` (leitura dos cadastros, `/integracao` e escrita em `/insumos`, para o estoque).
 - Swagger UI: http://localhost:8081/swagger-ui.html → `POST /auth/login` → botão **Authorize** → cole o `accessToken`.
 
 | Variável | Padrão (só desenvolvimento) | Uso |
@@ -111,7 +129,7 @@ A matriz completa de permissões está na descrição do contrato (`static/contr
 | `ADMIN_LOGIN` / `ADMIN_PASSWORD` | `admin` / `admin12345` | Administrador inicial |
 | `INTEGRACAO_API_KEY` | `dev-integracao-key` | Chave `X-Api-Key` (no ms-agendamento: `ADMINISTRATIVO_API_KEY`) |
 
-Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUser`; o fluxo real (login, token, perfis, API key) está em `AuthApiIntegrationTest`.
+Nos testes, `@ComGrupo("RECEPCIONISTA")` (classe ou método) e `.with(Acessos.grupo("dr", "MEDICO"))` (por requisição) dão ao usuário simulado as permissões reais do grupo no banco; `"SERVICO"` simula a X-Api-Key. O fluxo real (login, token, API key) está em `AuthApiIntegrationTest` e o RBAC em `RbacApiTest`.
 
 ## Entidades do diagrama de classes
 
@@ -120,7 +138,7 @@ Nos testes, `AdministrativoApiIntegrationTest` roda como ADMIN via `@WithMockUse
 | `Paciente` (+ `Endereco` embutido) | `pacientes` | `/pacientes` | `sexo`, `telefone` (celular), `telefoneFixo`, `endereco`; `calcularIdade()`/`ehMenorDeIdade()`; **menor de idade exige responsável** (422) |
 | `ResponsavelLegal` | `responsaveis_legais` | `/responsaveis` | CPF único e válido; não remove com pacientes vinculados |
 | `Medico` | `medicos`, `medico_especialidades` | `/medicos` | `ufCrm`; **várias especialidades** (`especialidadeIds`); CRM único por UF |
-| `Funcionario` | `funcionarios` | `/funcionarios` | `cargo` (enum `Cargo`) define o perfil de acesso |
+| `Funcionario` | `funcionarios` | `/funcionarios` | `cargo` (enum `Cargo`) define o grupo de acesso padrão |
 | `Convenio` | `convenios` | `/convenios` | registro ANS e CNPJ únicos (CNPJ validado) |
 | `Sala` | `salas` | `/salas` | `numero` único, `tipo` (CONSULTORIO, CIRURGIA ou PROCEDIMENTO), `andar` e `observacoes`; não remove com disponibilidades |
 | `Insumo` | `insumos` | `/insumos`, `PATCH /insumos/{id}/custo` | código único; **ms-estoque pode escrever** (X-Api-Key) |
@@ -152,6 +170,21 @@ Regras de inativação:
 
 Migration V10: adiciona as colunas às 12 tabelas e gera um UUID (`UUID()` do banco) para os registros existentes.
 
+## Pacientes: busca, LGPD e convênios
+
+- `GET /pacientes[?ativo=]` sem `ativo` traz só os ativos. Filtro por nome e CPF fica em `POST /pacientes/busca` (corpo `{nome, cpf, ativo}`), para não pôr dado pessoal na URL (RNF08). As listagens devolvem o CPF mascarado; o CPF completo só sai no `GET /pacientes/{id}`.
+- `GET /pacientes/{id}` é o detalhe completo: inclui `convenios`, os vínculos ativos com carteirinha, validade e `vigente`. As listagens não trazem esse campo.
+- Consentimento LGPD (RF26): `consentimentoLgpd` + `versaoTermoLgpd` (obrigatória quando há consentimento). O servidor registra `dataConsentimentoLgpd`, que só muda quando a versão do termo muda; retirar o consentimento limpa os dois.
+- Vínculo com convênio (RF06, HU04) em `/pacientes/{id}/convenios`, direto com o convênio (o plano é de outro grupo). Regras: convênio ativo (`ADM-PCV-001`), um vínculo ativo por convênio (`ADM-PCV-002`, 409), carteirinha não vencida (`ADM-PCV-003`), paciente ativo (`ADM-PCV-004`) e vínculo desvinculado não muda mais (`ADM-PCV-005`). `DELETE` desvincula (inativa) e mantém o histórico. Inativar o convênio não mexe no vínculo, mas ele deixa de ser vigente (RN16).
+- Especialidade com médico ativo não pode ser inativada (RN11): 422 `ADM-ESP-002` com `medicosVinculados`.
+
+## Funcionários, médicos e convênios: listagem e busca
+
+- `GET /funcionarios`, `GET /medicos` e `GET /convenios` aceitam `?ativo=`; sem ele trazem só os ativos. Em convênios, os ativos são os disponíveis para novas vinculações; `?ativo=false` traz os inativos para reativação.
+- `POST /funcionarios/busca` (`FUNCIONARIO_CONSULTAR`), corpo `{nome, cpf, ativo}`.
+- `POST /medicos/busca` (`MEDICO_CONSULTAR`, como o `GET`), corpo `{nome, crm, ufCrm, especialidadeId, ativo}`; os filtros se combinam.
+- Como em pacientes, os filtros vão no corpo (RNF08), nenhum resultado devolve página vazia, e as listagens e buscas de funcionários e médicos devolvem o CPF mascarado (RN20); o CPF completo só sai no `GET /{id}`.
+
 ## Integração e eventos
 
 Escopo do grupo: só o ms-administrativo (os demais microserviços são de outros grupos). Não há Unidade, e Plano de convênio fica com outro grupo.
@@ -167,6 +200,7 @@ Escopo do grupo: só o ms-administrativo (os demais microserviços são de outro
 | `GET /integracao/medicos?ids=1,2&especialidadeId=` | Lote (até 100 ids) e/ou médicos ativos da especialidade |
 | `GET /integracao/pacientes/{id}`, `/situacao`, `/contato` | Resumo (CPF mascarado), situação e contato do paciente |
 | `GET /integracao/pacientes?ids=1,2` | Pacientes em lote (até 100), CPF mascarado |
+| `GET /integracao/pacientes/{id}/convenios/vigentes[?data=]` | Vínculos vigentes na data (hoje, se omitida): vínculo ativo, convênio ativo e carteirinha válida |
 | `GET /integracao/salas[?tipo=]`, `/integracao/salas/{id}` | Salas ativas (por tipo) e resumo da sala |
 | `GET /integracao/convenios`, `/integracao/convenios/{id}` | Convênios ativos e resumo do convênio |
 
@@ -180,6 +214,7 @@ Cada cadastro publica, na mesma transação da alteração (`services/EventoServ
 |---|---|
 | especialidade, sala, disponibilidade | `.criada`, `.atualizada`, `.inativada`, `.reativada`, `.removida` |
 | paciente, medico, funcionario, convenio, responsavel-legal, insumo, procedimento, custo-medico | `.criado`, `.atualizado`, `.inativado`, `.reativado`, `.removido` |
+| vínculo paciente–convênio (agregadoId = id do paciente) | `paciente.convenio-vinculado`, `paciente.convenio-atualizado`, `paciente.convenio-desvinculado` |
 
 Envelope: `eventoId`, `tipo`, `versao`, `ocorridoEm`, `origem` (`ms-administrativo`), `agregadoId`, `camposAlterados` (nos `.atualizado`) e `dados` (o Resumo da entidade, o mesmo da API de integração, sem CPF completo).
 Um PUT que não muda nada e um PATCH de status repetido não publicam evento. Remover um médico apaga em cascata seus custos e disponibilidades; o evento `medico.removido` representa os três.

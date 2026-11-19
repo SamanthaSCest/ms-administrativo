@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import br.edu.imepac.clinicalapi.common.util.Datas;
+
 import java.time.LocalDate;
 
 /** Custos dos médicos (escrita só ADMIN). Contrato: static/contract/openapi-administrativo.yaml */
@@ -49,7 +51,7 @@ public class CustoMedicoController {
                                        @RequestParam(required = false) Long especialidadeId,
                                        @RequestParam(required = false) Long procedimentoId,
                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data) {
-        return service.buscarVigente(medicoId, especialidadeId, procedimentoId, data == null ? LocalDate.now() : data);
+        return service.buscarVigente(medicoId, especialidadeId, procedimentoId, data == null ? Datas.hoje() : data);
     }
 
     @GetMapping("/{id}")

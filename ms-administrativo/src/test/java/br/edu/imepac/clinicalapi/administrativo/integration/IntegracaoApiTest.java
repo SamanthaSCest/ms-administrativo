@@ -13,7 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.Acessos;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -24,7 +25,6 @@ import java.util.stream.LongStream;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class IntegracaoApiTest {
 
     private static final String API_KEY = "dev-integracao-key";
@@ -189,7 +189,7 @@ class IntegracaoApiTest {
     void integracao_exigeChaveOuAdmin_eNaoAceitaEscrita() throws Exception {
         // Sem chave e sem usuário: 401; perfil FUNCIONARIO: 403
         mockMvc.perform(get("/integracao/especialidades").with(anonymous())).andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/integracao/especialidades").with(user("recepcao").roles("FUNCIONARIO")))
+        mockMvc.perform(get("/integracao/especialidades").with(Acessos.grupo("recepcao", "RECEPCIONISTA")))
                 .andExpect(status().isForbidden());
         // Somente leitura (RN18): não existe rota de escrita
         mockMvc.perform(post("/integracao/especialidades").header("X-Api-Key", API_KEY).with(anonymous())

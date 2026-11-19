@@ -1,7 +1,8 @@
 package br.edu.imepac.clinicalapi.administrativo.config;
 
-import br.edu.imepac.clinicalapi.administrativo.entities.Perfil;
+import br.edu.imepac.clinicalapi.administrativo.entities.Grupo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Usuario;
+import br.edu.imepac.clinicalapi.administrativo.repositories.GrupoRepository;
 import br.edu.imepac.clinicalapi.administrativo.repositories.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +23,14 @@ public class AdminInicializador implements ApplicationRunner {
     private static final String SENHA_PADRAO_DEV = "admin12345";
 
     private final UsuarioRepository repository;
+    private final GrupoRepository grupoRepository;
     private final PasswordEncoder passwordEncoder;
     private final SegurancaProperties props;
 
-    public AdminInicializador(UsuarioRepository repository, PasswordEncoder passwordEncoder, SegurancaProperties props) {
+    public AdminInicializador(UsuarioRepository repository, GrupoRepository grupoRepository,
+                              PasswordEncoder passwordEncoder, SegurancaProperties props) {
         this.repository = repository;
+        this.grupoRepository = grupoRepository;
         this.passwordEncoder = passwordEncoder;
         this.props = props;
     }
@@ -46,7 +50,9 @@ public class AdminInicializador implements ApplicationRunner {
         Usuario usuario = new Usuario();
         usuario.setLogin(admin.login());
         usuario.setSenha(passwordEncoder.encode(admin.senha()));
-        usuario.setPerfil(Perfil.ADMIN);
+        // Grupo ADMINISTRADOR (todas as permissões), criado pela migration V14
+        usuario.adicionarGrupo(grupoRepository.findByNome(Grupo.ADMINISTRADOR)
+                .orElseThrow(() -> new IllegalStateException("Grupo ADMINISTRADOR não encontrado (migration V14)")));
         usuario.setAtivo(true);
         repository.save(usuario);
         log.info("Administrador inicial '{}' criado", admin.login());

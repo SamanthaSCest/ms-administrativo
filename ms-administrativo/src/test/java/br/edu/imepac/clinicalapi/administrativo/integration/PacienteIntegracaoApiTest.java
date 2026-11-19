@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "servico", roles = "SERVICO")  // chamada de outro microserviço (X-Api-Key)
+@ComGrupo(username = "servico", value = "SERVICO")  // chamada de outro microserviço (X-Api-Key)
 class PacienteIntegracaoApiTest {
 
     @Autowired

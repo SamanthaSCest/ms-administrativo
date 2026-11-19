@@ -7,7 +7,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Component;
 
 /**
- * Mapper de Funcionário (DTO <-> entidade). senha e perfil do request são tratados pelo UsuarioService.
+ * Mapper de Funcionário (DTO <-> entidade). senha e grupo de acesso são tratados pelo UsuarioService.
  */
 @Component
 public class FuncionarioMapper {

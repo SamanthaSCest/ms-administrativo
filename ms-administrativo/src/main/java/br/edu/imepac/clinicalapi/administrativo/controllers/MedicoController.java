@@ -1,5 +1,6 @@
 package br.edu.imepac.clinicalapi.administrativo.controllers;
 
+import br.edu.imepac.clinicalapi.administrativo.dto.MedicoBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.MedicoResponse;
 import br.edu.imepac.clinicalapi.administrativo.services.MedicoService;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -41,9 +43,16 @@ public class MedicoController {
         return ResponseEntity.created(location).body(criado);
     }
 
+    /** Sem "ativo", traz só os ativos. CPF mascarado. Filtros por nome/CRM/especialidade ficam no POST /busca. */
     @GetMapping
-    public Page<MedicoResponse> listar(Pageable pageable) {
-        return service.listar(pageable);
+    public Page<MedicoResponse> listar(@RequestParam(required = false) Boolean ativo, Pageable pageable) {
+        return service.listar(ativo, pageable);
+    }
+
+    /** Busca com o nome no corpo, e não na URL (RNF08). Paginação continua na query (?page=&size=). */
+    @PostMapping("/busca")
+    public Page<MedicoResponse> buscar(@Valid @RequestBody MedicoBuscaRequest filtro, Pageable pageable) {
+        return service.buscar(filtro, pageable);
     }
 
     @GetMapping("/{id}")

@@ -13,7 +13,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithAnonymousUser;
-import org.springframework.security.test.context.support.WithMockUser;
+import br.edu.imepac.clinicalapi.administrativo.support.ComGrupo;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@WithMockUser(username = "admin", roles = "ADMIN")
+@ComGrupo(username = "admin", value = "ADMINISTRADOR")
 class ProcedimentoInsumoApiTest {
 
     private static final String API_KEY = "dev-integracao-key";
@@ -161,11 +161,25 @@ class ProcedimentoInsumoApiTest {
     }
 
     @Test
-    @WithMockUser(username = "recepcao", roles = "FUNCIONARIO")
-    void funcionario_consultaInsumos_masNaoAltera() throws Exception {
+    @ComGrupo(username = "dr", value = "MEDICO")
+    void medico_consultaInsumos_masNaoAltera() throws Exception {
         mockMvc.perform(get("/insumos")).andExpect(status().isOk());
         mockMvc.perform(post("/insumos").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"codigo\":\"X\",\"nome\":\"X\",\"unidadeMedida\":\"UN\",\"custoUnitario\":1}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @ComGrupo(username = "estoque", value = "ESTOQUISTA")
+    void estoquista_cadastraInsumo() throws Exception {
+        mockMvc.perform(post("/insumos").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigo\":\"EST-1\",\"nome\":\"Luva\",\"unidadeMedida\":\"UN\",\"custoUnitario\":1}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @ComGrupo(username = "recepcao", value = "RECEPCIONISTA")
+    void recepcionista_naoConsultaInsumos() throws Exception {
+        mockMvc.perform(get("/insumos")).andExpect(status().isForbidden());
     }
 }

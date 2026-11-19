@@ -39,7 +39,7 @@ public class AuthService {
                     log.warn("Tentativa de login inválida");
                     return new CredenciaisInvalidasException();
                 });
-        log.info("Login do usuário {} (perfil {})", usuario.getId(), usuario.getPerfil());
+        log.info("Login do usuário {} (grupos {})", usuario.getId(), usuario.getGrupos().stream().map(g -> g.getNome()).toList());
         return new TokenResponse(tokenService.gerar(usuario), "Bearer", tokenService.validade().toSeconds(),
                 usuarioService.toResponse(usuario));
     }

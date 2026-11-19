@@ -1,7 +1,9 @@
 package br.edu.imepac.clinicalapi.administrativo.controllers;
 
+import br.edu.imepac.clinicalapi.administrativo.dto.PacienteBuscaRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteRequest;
 import br.edu.imepac.clinicalapi.administrativo.dto.PacienteResponse;
+import br.edu.imepac.clinicalapi.administrativo.services.PacienteConvenioService;
 import br.edu.imepac.clinicalapi.administrativo.services.PacienteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -27,6 +30,7 @@ import java.net.URI;
 public class PacienteController {
 
     private final PacienteService service;
+    private final PacienteConvenioService convenioService;
 
     // @Valid dispara o Bean Validation do DTO; se falhar => MethodArgumentNotValidException => 400
     @PostMapping
@@ -37,14 +41,24 @@ public class PacienteController {
         return ResponseEntity.created(location).body(criado);
     }
 
+    /** Sem "ativo", traz só os ativos. CPF mascarado. Filtros por nome/CPF ficam no POST /busca (RNF08). */
     @GetMapping
-    public Page<PacienteResponse> listar(Pageable pageable) {
-        return service.listar(pageable);
+    public Page<PacienteResponse> listar(@RequestParam(required = false) Boolean ativo, Pageable pageable) {
+        return service.listar(ativo, pageable);
     }
 
+    /** Busca com dados pessoais no corpo, e não na URL (RNF08). Paginação continua na query (?page=&size=). */
+    @PostMapping("/busca")
+    public Page<PacienteResponse> buscar(@Valid @RequestBody PacienteBuscaRequest filtro, Pageable pageable) {
+        return service.buscar(filtro, pageable);
+    }
+
+    /** Detalhe completo: dados pessoais, contato e os convênios vinculados (com carteirinha). */
     @GetMapping("/{id}")
     public PacienteResponse buscar(@PathVariable Long id) {
-        return service.buscar(id);
+        PacienteResponse paciente = service.buscar(id);
+        paciente.setConvenios(convenioService.listarAtivos(id));
+        return paciente;
     }
 
     @PutMapping("/{id}")

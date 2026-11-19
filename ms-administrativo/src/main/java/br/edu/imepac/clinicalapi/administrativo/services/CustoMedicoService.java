@@ -23,6 +23,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.edu.imepac.clinicalapi.common.util.Datas;
+
 import java.time.LocalDate;
 import java.util.Objects;
 
@@ -167,7 +169,7 @@ public class CustoMedicoService {
         }
         return new CustoMedicoResponse(c.getId(), c.getTipo(),
                 new Referencia(c.getMedico().getId(), c.getMedico().getNome()), especialidade, procedimento,
-                c.getValor(), c.getVigenciaInicio(), c.getVigenciaFim(), c.estaVigente(LocalDate.now()),
+                c.getValor(), c.getVigenciaInicio(), c.getVigenciaFim(), c.estaVigente(Datas.hoje()),
                 c.getUuid(), c.isAtivo(), c.getCriadoPor(), c.getAtualizadoPor(),
                 c.getDataCriacao(), c.getDataModificacao());
     }

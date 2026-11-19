@@ -7,6 +7,7 @@ import br.edu.imepac.clinicalapi.administrativo.dto.integracao.EspecialidadeResu
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.FuncionarioResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.InsumoResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.MedicoResumo;
+import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteConvenioResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.PacienteResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.ProcedimentoResumo;
 import br.edu.imepac.clinicalapi.administrativo.dto.integracao.ResponsavelLegalResumo;
@@ -24,6 +25,7 @@ import br.edu.imepac.clinicalapi.administrativo.entities.Funcionario;
 import br.edu.imepac.clinicalapi.administrativo.entities.Insumo;
 import br.edu.imepac.clinicalapi.administrativo.entities.Medico;
 import br.edu.imepac.clinicalapi.administrativo.entities.Paciente;
+import br.edu.imepac.clinicalapi.administrativo.entities.PacienteConvenio;
 import br.edu.imepac.clinicalapi.administrativo.entities.Procedimento;
 import br.edu.imepac.clinicalapi.administrativo.entities.ResponsavelLegal;
 import br.edu.imepac.clinicalapi.administrativo.entities.Sala;
@@ -100,6 +102,11 @@ public class ResumoMapper {
 
     public ConvenioResumo convenio(Convenio c) {
         return new ConvenioResumo(c.getId(), c.getUuid(), c.getNome(), c.getRegistroAns(), c.getCnpj(), c.isAtivo());
+    }
+
+    public PacienteConvenioResumo pacienteConvenio(PacienteConvenio v) {
+        return new PacienteConvenioResumo(v.getId(), v.getUuid(), v.getPaciente().getId(), convenio(v.getConvenio()),
+                v.getNumeroCarteirinha(), v.getValidade(), v.isAtivo());
     }
 
     public SalaResumo sala(Sala s) {

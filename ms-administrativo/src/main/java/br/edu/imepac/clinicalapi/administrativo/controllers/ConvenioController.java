@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -33,9 +34,10 @@ public class ConvenioController {
                 .buildAndExpand(criado.getId()).toUri()).body(criado);
     }
 
+    /** Sem "ativo", traz só os ativos (os disponíveis para vincular a pacientes). */
     @GetMapping
-    public Page<ConvenioResponse> listar(Pageable pageable) {
-        return service.listar(pageable);
+    public Page<ConvenioResponse> listar(@RequestParam(required = false) Boolean ativo, Pageable pageable) {
+        return service.listar(ativo, pageable);
     }
 
     @GetMapping("/{id}")
